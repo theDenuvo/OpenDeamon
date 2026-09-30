@@ -11,6 +11,24 @@ fallback_providers:
   - provider: openrouter
     model: nvidia/nemotron-3.5-lightning:free
 auxiliary:
+  # --- $0 rail for background traffic (TODO phase 2.1) ---
+  # free_only: the auto-chain's OpenRouter step is skipped unless the
+  # fallback model ends in ":free", so a PAID lane is unreachable for aux
+  # calls even with OPENROUTER_API_KEY set. The default is False, and the
+  # default openrouter_model below is google/gemini-3.6-flash - PAID - with
+  # only a WARNING when it engages. Warning is not a control.
+  free_only: true
+  # Pinned to the free SKU explicitly rather than left to the auto-chain.
+  openrouter_model: "nvidia/nemotron-3-ultra-550b-a55b:free"
+  # Measured 2026-09-30 in state.db session_model_usage:
+  #   title_generation   52 calls   (vs 90 main-turn calls)
+  #   background_review   7 calls
+  # Neither affects answer quality. Both are pure overhead on a 1000/day
+  # bucket. Disabled rather than left on by default.
+  title_generation:
+    enabled: false
+  background_review:
+    enabled: false
   vision:
     provider: openrouter
     model: dots-studio/dots-3-note-preview:free
