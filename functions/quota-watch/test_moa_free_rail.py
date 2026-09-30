@@ -1,4 +1,4 @@
-﻿"""MoA $0 interlock: prove no PAID model is reachable through MoA.
+"""MoA $0 interlock: prove no PAID model is reachable through MoA.
 
 Why this exists
 ---------------
