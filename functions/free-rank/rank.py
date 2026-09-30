@@ -34,8 +34,27 @@ CHART = r"A:\AI\tests\images\04_chart_ru.png"
 # Empirically dead on the real vision path (stress test 2026-09-29):
 # models.dev claims vision support, OpenRouter answers 404 to images.
 VISION_DENY = {
+    # Both verified live on 2026-09-29 (STRESS_TEST_REPORT.md, vision table):
+    # HTTP 404 "No endpoints support image input" on a real image request.
+    # models.dev still advertises vision: true for both, which is why the
+    # catalogue flag cannot be trusted here.
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "google/gemma-4-31b-it:free",
 }
+
+
+def vision_usable(e):
+    """May this model hold a vision role?
+
+    models.dev advertising image input is not enough: VISION_DENY holds models
+    that 404 on real images. This is a pure predicate, deliberately not a flag
+    stashed on the entry. The scoring functions are called from sort keys, from
+    the >= 0 filter and from the hysteresis check, and the first of those to run
+    used to decide eligibility by side effect: if score_reason returned -1
+    before reaching eff(), the deny list was never applied and the model scored
+    as if it were healthy.
+    """
+    return bool(e.get("vision")) and e["id"] not in VISION_DENY
 
 
 def or_key():
@@ -163,6 +182,7 @@ def main():
             "aider": any(k in aider_low for k in
                          fam(mid).replace("/", " ").split()[:2]),
         }
+        entry["vision_usable"] = vision_usable(entry)
         table.append(entry)
 
     if weekly:
@@ -180,15 +200,26 @@ def main():
         except Exception as ex:
             print("NO-PREV-RANKING:", ex)
 
-    def eff(e):
-        # dead models are out; congested fall back to caps baseline
-        if (e.get("status") or "ok") == "dead":
-            return -1, -1
-        if e["id"] in VISION_DENY and e.get("vision"):
-            # cache claims vision, API 404s on real images: vision roles out
-            e["_novision"] = True
-        base = e["probe"] if e.get("probe") is not None else 2
-        return base, base
+    def eff(e, congested_baseline=False):
+        """Effective probe score, or -1 when the model must not be used.
+
+        ``congested_baseline`` decides what a rate-limited model scores.
+        Default False keeps the historical behaviour (probe as-is, so a
+        congested model ranks last) for the MAIN model chain - free-tier
+        congestion is real and TODO phase 2.3 requires measuring success rate
+        before changing which model serves the main turn.
+
+        Vision passes True: a 404-on-images model must be excluded by
+        VISION_DENY rather than by its probe score, and a vision role should
+        not be handed to a model that merely rate-limited during a probe when
+        a proven one exists.
+        """
+        status = e.get("status") or "ok"
+        if status == "dead":
+            return -1
+        if congested_baseline and (status == "congested" or e.get("probe") is None):
+            return 2
+        return e["probe"]
 
     prev_win = {}
     try:
@@ -205,7 +236,7 @@ def main():
     def score_reason(e):
         if not (e["tool"] and e["reason"]):
             return -1
-        p, _ = eff(e)
+        p = eff(e)
         if p < 0:
             return -1
         s = (e["ctx"] >= 100000) + (e["ctx"] >= 262144)
@@ -214,9 +245,9 @@ def main():
         return s
 
     def score_vision(e):
-        if not e["vision"] or e.get("_novision"):
+        if not vision_usable(e):
             return -1
-        p, _ = eff(e)
+        p = eff(e, congested_baseline=True)
         if p < 0:
             return -1
         return 1 + p + (1 if e["aider"] else 0)
@@ -224,7 +255,7 @@ def main():
     def score_cheap(e):
         if not e["tool"]:
             return -1
-        p, _ = eff(e)
+        p = eff(e)
         if p < 0:
             return -1
         return p + (1 if e["ctx"] and e["ctx"] <= 262144 else 0)
@@ -264,24 +295,46 @@ def main():
         table, key=lambda e: (score_reason(e), e["ctx"] or 0), reverse=True)
         if score_reason(e) >= 0]
     print("ORDER:", order)
+    # Vision fallbacks must be ranked among vision-capable models. Taking them
+    # from the reasoning order hands the vision role text-only models that
+    # 400 on an image, which is worse than having no fallback at all.
+    vision_order = [e["id"] for e in sorted(
+        (e for e in table if vision_usable(e)),
+        key=lambda e: (score_vision(e), e["ctx"] or 0), reverse=True)
+        if score_vision(e) >= 0]
+    print("VISION-ORDER:", vision_order)
 
     ranking = {"ts": datetime.datetime.now().isoformat(timespec="seconds"),
-               "winners": winners, "order": order,
+               # `winners` is the ranker's opinion for THIS run.
+               "winners": winners,
+               # `applied` is what config.yaml actually carries right now.
+               # These two differ BY DESIGN and routinely: hysteresis keeps a
+               # proven model in place, and the owner hand-edits the vision
+               # chain to the one model that passed a live image test. Before
+               # this split the file was read as "this is the configuration",
+               # which is exactly how a broken vision winner looked correct.
+               "applied": {k: v for k, v in prev_win.items() if v},
+               "order": order,
                "table": [{k: v for k, v in e.items()} for e in table]}
     if not apply:
         print("DRY-RUN (add --apply to rewrite configs)")
         return
     with open(RANKING, "w", encoding="utf-8") as f:
         json.dump(ranking, f, indent=1)
-
     cfg = yaml.safe_load(open(HERMES_CFG, encoding="utf-8"))
     cfg["model"] = {"provider": "openrouter", "default": winners["reasoning"]}
     cfg["fallback_providers"] = [
         {"provider": "openrouter", "model": m} for m in order[1:4]]
-    cfg.setdefault("auxiliary", {})["vision"] = {
-        "provider": "openrouter", "model": winners["vision"],
-        "fallback_chain": [{"provider": "openrouter", "model": m}
-                           for m in order if m != winners["vision"]][:2]}
+    if winners["vision"]:
+        cfg.setdefault("auxiliary", {})["vision"] = {
+            "provider": "openrouter", "model": winners["vision"],
+            "fallback_chain": [{"provider": "openrouter", "model": m}
+                               for m in vision_order
+                               if m != winners["vision"]][:2]}
+    else:
+        # Nothing eligible: leave the existing vision block untouched rather
+        # than writing "model: null" and breaking every vision call.
+        print("NO-VISION-CANDIDATE (keeping existing auxiliary.vision)")
     cfg.setdefault("delegation", {})["model"] = winners["cheap"]
     cfg["delegation"]["provider"] = "openrouter"
     header = ("# OpenDeamon — Hermes configuration (managed by free-rank).\n"

@@ -10,9 +10,11 @@ reading 16 GB of bf16 shards into a 16 GB card. ComfyUI's GGUF nodes keep
 quantized weights in RAM and stream layers per forward pass — which is exactly
 what 16 GB needs.
 
-Model on this box: Qwen-Image-2.1 (Uncensored) GGUF Q5_K_M, the top-downloaded
-text-to-image model on HF trending at 2026-09-30. SD 1.5 (2022) was rejected by
-the user as "plastic clay", so the ladder is Qwen first, FLUX/SD only as fallback.
+Model actually loaded on this box: Qwen-Image-2.1 (Uncensored) **fp8**
+safetensors, the top-downloaded text-to-image model on HF at 2026-09-30.
+An earlier revision of this docstring claimed GGUF Q5_K_M; that was wrong -
+ComfyUI-GGUF rejects the qwen_image21 architecture outright and
+ComfyUI's own UNETLoader handles it natively, so no GGUF is involved.
 
 Usage:
     comfy_gen.py "prompt" [--out PATH] [--steps N] [--size WxH] [--seed N] [--json]
