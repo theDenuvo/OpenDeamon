@@ -34,8 +34,24 @@ display:
     scale: 0.3
 _config_version: 46
 moa:
+  # KEEP THIS BLOCK. Do not delete it to "disable MoA".
+  #
+  # Deleting `moa:` does NOT disable MoA - it re-exposes Hermes' built-in
+  # default preset from hermes_cli/config_defaults.py:1408-1416, whose
+  # reference models are openai-codex/gpt-5.5 and openrouter/deepseek-v4-pro
+  # with an anthropic/claude-opus-4.8 aggregator. All three are PAID. That
+  # would turn a $0 project into a $0-violation on the next /moa.
+  #
+  # normalize_moa_config() (hermes_cli/moa_config.py:249) only falls back to
+  # that preset when this one is absent, so this block is the safety interlock.
+  #
+  # `enabled: false` on the preset is what actually neutralises it: per
+  # agent/moa_loop.py:1343-1346 "a disabled preset = use the aggregator
+  # directly", so /moa costs 1 free call instead of fanning out to 3. No
+  # fan-out, no surprise 3x spend, no paid model reachable.
   presets:
     default:
+      enabled: false
       reference_models:
         - provider: openrouter
           model: nvidia/nemotron-3-ultra-550b-a55b:free
@@ -45,21 +61,20 @@ moa:
           enabled: true
       degraded_reference_policy: loud
       fanout: user_turn
+      # provider is REQUIRED here. Without it _clean_slot() returns None and
+      # _normalize_preset() falls back to DEFAULT_MOA_AGGREGATOR, which is
+      # anthropic/claude-opus-4.8 - PAID. The preset had `aggregator.model`
+      # with no `provider` between 2026-09-29 and now, so /moa was silently
+      # billing a paid aggregator on a $0 project. Verified by normalizing
+      # the config and reading the resolved slot.
       aggregator:
+        provider: openrouter
         model: nvidia/nemotron-3.5-lightning:free
-  reference_models:
-    - provider: openrouter
-      model: nvidia/nemotron-3-ultra-550b-a55b:free
-      enabled: true
-    - provider: openrouter
-      model: nvidia/nemotron-3-super-120b-a12b:free
-      enabled: true
-  aggregator:
-    provider: openrouter
-    model: nvidia/nemotron-3.5-lightning:free
-  degraded_reference_policy: loud
-  fanout: user_turn
-  enabled: true
+  # The old flat duplicate keys (reference_models/aggregator/enabled) were dead
+  # weight: normalize_moa_config only reads the flat form when `presets` is
+  # empty, and it rebuilds a flattened view from the preset anyway. They also
+  # carried a nano-omni entry - the model that 404s on images - so leaving them
+  # was a second trap for anyone who later deleted `presets:`.
 approvals:
   mode: "off"
   cron_mode: auto
@@ -75,8 +90,13 @@ hooks:
       prompt: "delegate-first: code tools are blocked on purpose. Hand coding to the opencode CLI worker with one 'opencode run -m opencode/space-bunny-free ...' terminal call, then verify by running the tests."
       command: "py -u A:/OpenDeamon/functions/delegate-first/pre_tool_budget.py"
       timeout: 10
-    - matcher: "*"
-      prompt: "quota-watch: OpenRouter spend/daily-free limits are enforced by this hook. If it reports a QUOTA WARNING or STOP, switch to the opencode-free ladder or local functions."
+    # NO matcher key on purpose. An absent matcher means "fire on every tool"
+    # (agent/shell_hooks.py: matcher.strip() or None -> matches_tool returns
+    # True). The previous value was matcher: "*", which fails re.compile()
+    # ("nothing to repeat at position 0"), falls back to literal equality, and
+    # then matches only a tool literally named "*" - i.e. this hook never ran.
+    # Verified in hermes-home/logs/errors.log on 2026-09-30 15:03.
+    - prompt: "quota-watch: OpenRouter spend/daily-free limits are enforced by this hook. If it reports a QUOTA WARNING or STOP, switch to the opencode-free ladder or local functions."
       command: "py -u A:/OpenDeamon/functions/quota-watch/quota_watch.py"
       timeout: 20
 hooks_auto_accept: true

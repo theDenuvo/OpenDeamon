@@ -57,3 +57,17 @@ hermes-home/desktop-build-stamp.json
 hermes-home/.npm_lock_hash_*
 
 .DS_Store
+
+# --- bulk binaries and runtime artifacts that bloated the repo to 101 MB ---
+# third-party executables: present on disk, never in history
+tools/ffmpeg/
+# 47 MB hub catalogue snapshot: regenerable by `hermes skills` from the network
+hermes-home/skills/.hub/index-cache/
+# sprite sheets are binary assets shipped with the pet pack
+hermes-home/pets/*/spritesheet.webp
+# cron run log: append-only runtime state
+hermes-home/cron/executions.db
+hermes-home/cron/*.db
+# model weights and large generated artifacts
+hermes-home/generated/
+A:/generated/
