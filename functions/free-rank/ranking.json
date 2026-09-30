@@ -1,0 +1,185 @@
+{
+ "ts": "2026-09-29T17:29:20",
+ "winners": {
+  "reasoning": "nvidia/nemotron-3-super-120b-a12b:free",
+  "vision": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+  "cheap": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+ },
+ "order": [
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "inclusionai/ling-3.0-flash-sante:free",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+  "nvidia/nemotron-3.5-lightning:free",
+  "poolside/laguna-xs-2.1:free",
+  "dots-studio/dots-3-note-preview:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "google/gemma-4-31b-it:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "poolside/laguna-s-2.1:free",
+  "qwen/qwen3.8-27b:free",
+  "cohere/north-mini-code:free",
+  "liquid/lfm-2.5-2.6b:free"
+ ],
+ "table": [
+  {
+   "id": "cohere/north-mini-code:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 256000,
+   "vision": false,
+   "probe": 1,
+   "aider": false,
+   "status": "ok"
+  },
+  {
+   "id": "dots-studio/dots-3-note-preview:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 512000,
+   "vision": true,
+   "probe": 0,
+   "aider": false,
+   "status": "ok"
+  },
+  {
+   "id": "google/gemma-4-26b-a4b-it:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 262144,
+   "vision": true,
+   "probe": 0,
+   "aider": false,
+   "status": "congested"
+  },
+  {
+   "id": "google/gemma-4-31b-it:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 262144,
+   "vision": true,
+   "probe": 0,
+   "aider": false,
+   "status": "congested"
+  },
+  {
+   "id": "inclusionai/ling-3.0-flash-sante:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 262144,
+   "vision": false,
+   "probe": 2,
+   "aider": false,
+   "status": "ok"
+  },
+  {
+   "id": "liquid/lfm-2.5-2.6b:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 65536,
+   "vision": false,
+   "probe": 1,
+   "aider": false,
+   "status": "ok"
+  },
+  {
+   "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 256000,
+   "vision": true,
+   "probe": 3,
+   "aider": false,
+   "status": "ok"
+  },
+  {
+   "id": "nvidia/nemotron-3-super-120b-a12b:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 262144,
+   "vision": false,
+   "probe": 0,
+   "aider": false,
+   "status": "congested"
+  },
+  {
+   "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 1000000,
+   "vision": false,
+   "probe": 2,
+   "aider": false,
+   "status": "ok"
+  },
+  {
+   "id": "nvidia/nemotron-3.5-content-safety:free",
+   "tool": false,
+   "reason": true,
+   "ctx": 128000,
+   "vision": true,
+   "probe": 0,
+   "aider": false,
+   "status": "ok"
+  },
+  {
+   "id": "nvidia/nemotron-3.5-lightning:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 1000000,
+   "vision": false,
+   "probe": 1,
+   "aider": false,
+   "status": "congested"
+  },
+  {
+   "id": "poolside/laguna-s-2.1:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 262144,
+   "vision": false,
+   "probe": 0,
+   "aider": false,
+   "status": "congested"
+  },
+  {
+   "id": "poolside/laguna-xs-2.1:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 262144,
+   "vision": false,
+   "probe": 1,
+   "aider": false,
+   "status": "ok"
+  },
+  {
+   "id": "qwen/qwen3.8-27b:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 262144,
+   "vision": true,
+   "probe": 0,
+   "aider": false,
+   "status": "congested"
+  },
+  {
+   "id": "thinkingmachines/inkling-small:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 1048576,
+   "vision": true,
+   "probe": 0,
+   "aider": false,
+   "status": "dead"
+  },
+  {
+   "id": "thinkingmachines/inkling:free",
+   "tool": true,
+   "reason": true,
+   "ctx": 1048576,
+   "vision": true,
+   "probe": 0,
+   "aider": false,
+   "status": "dead"
+  }
+ ]
+}

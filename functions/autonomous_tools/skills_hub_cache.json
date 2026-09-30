@@ -1,0 +1,1248 @@
+{
+  "skills": [
+    {
+      "name": "apple-notes",
+      "description": "\"Manage Apple Notes via memo CLI: create, search, edit.\"",
+      "tags": [
+        "Notes",
+        "Apple",
+        "macOS",
+        "note-taking"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "macos"
+      ],
+      "category": "apple",
+      "path": "skills/apple/apple-notes",
+      "install": "hermes skill install apple-notes"
+    },
+    {
+      "name": "apple-reminders",
+      "description": "\"Apple Reminders via remindctl: add, list, complete.\"",
+      "tags": [
+        "Reminders",
+        "tasks",
+        "todo",
+        "macOS",
+        "Apple"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "macos"
+      ],
+      "category": "apple",
+      "path": "skills/apple/apple-reminders",
+      "install": "hermes skill install apple-reminders"
+    },
+    {
+      "name": "findmy",
+      "description": "\"Track Apple devices/AirTags via FindMy.app on macOS.\"",
+      "tags": [
+        "FindMy",
+        "AirTag",
+        "location",
+        "tracking",
+        "macOS",
+        "Apple"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "macos"
+      ],
+      "category": "apple",
+      "path": "skills/apple/findmy",
+      "install": "hermes skill install findmy"
+    },
+    {
+      "name": "imessage",
+      "description": "Send and receive iMessages/SMS via the imsg CLI on macOS.",
+      "tags": [
+        "iMessage",
+        "SMS",
+        "messaging",
+        "macOS",
+        "Apple"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "macos"
+      ],
+      "category": "apple",
+      "path": "skills/apple/imessage",
+      "install": "hermes skill install imessage"
+    },
+    {
+      "name": "claude-code",
+      "description": "\"Delegate coding to Claude Code CLI (features, PRs).\"",
+      "tags": [
+        "Coding-Agent",
+        "Claude",
+        "Anthropic",
+        "Code-Review",
+        "Refactoring",
+        "PTY",
+        "Automation"
+      ],
+      "author": "Hermes Agent + Teknium",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "autonomous-ai-agents",
+      "path": "skills/autonomous-ai-agents/claude-code",
+      "install": "hermes skill install claude-code"
+    },
+    {
+      "name": "codex",
+      "description": "\"Delegate coding to OpenAI Codex CLI (features, PRs).\"",
+      "tags": [
+        "Coding-Agent",
+        "Codex",
+        "OpenAI",
+        "Code-Review",
+        "Refactoring"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "autonomous-ai-agents",
+      "path": "skills/autonomous-ai-agents/codex",
+      "install": "hermes skill install codex"
+    },
+    {
+      "name": "computer-use",
+      "description": "\"Drive the desktop background-first; escalate on signal.\"",
+      "tags": [
+        "computer-use",
+        "desktop",
+        "automation",
+        "gui",
+        "cross-platform"
+      ],
+      "author": "Francesco Bonacci (f-trycua), Hermes Agent",
+      "platforms": [
+        "macos",
+        "windows",
+        "linux"
+      ],
+      "category": "autonomous-ai-agents",
+      "path": "skills/autonomous-ai-agents/computer-use",
+      "install": "hermes skill install computer-use"
+    },
+    {
+      "name": "hermes-agent",
+      "description": "\"Use, configure, theme, extend, and orchestrate Hermes Agent.\"",
+      "tags": [
+        "hermes",
+        "setup",
+        "configuration",
+        "multi-agent",
+        "spawning",
+        "cli",
+        "gateway",
+        "bots",
+        "bot-mode",
+        "features",
+        "themes",
+        "skins",
+        "desktop-plugins",
+        "tui-widgets",
+        "petdex",
+        "development"
+      ],
+      "author": "Hermes Agent + Teknium",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "autonomous-ai-agents",
+      "path": "skills/autonomous-ai-agents/hermes-agent",
+      "install": "hermes skill install hermes-agent"
+    },
+    {
+      "name": "opencode",
+      "description": "\"Delegate coding to OpenCode CLI (features, PR review).\"",
+      "tags": [
+        "Coding-Agent",
+        "OpenCode",
+        "Autonomous",
+        "Refactoring",
+        "Code-Review"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "autonomous-ai-agents",
+      "path": "skills/autonomous-ai-agents/opencode",
+      "install": "hermes skill install opencode"
+    },
+    {
+      "name": "architecture-diagram",
+      "description": "\"Dark-themed SVG architecture/cloud/infra diagrams as HTML.\"",
+      "tags": [
+        "architecture",
+        "diagrams",
+        "SVG",
+        "HTML",
+        "visualization",
+        "infrastructure",
+        "cloud"
+      ],
+      "author": "Cocoon AI (hello@cocoon-ai.com), ported by Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/architecture-diagram",
+      "install": "hermes skill install architecture-diagram"
+    },
+    {
+      "name": "ascii-video",
+      "description": "\"ASCII video: convert video/audio to colored ASCII MP4/GIF.\"",
+      "tags": [
+        "ASCII",
+        "Video",
+        "FFmpeg",
+        "Terminal-Art"
+      ],
+      "author": "SHL0MS, Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/ascii-video",
+      "install": "hermes skill install ascii-video"
+    },
+    {
+      "name": "baoyu-infographic",
+      "description": "\"Infographics: 21 layouts x 21 styles (信息图, 可视化).\"",
+      "tags": [
+        "infographic",
+        "visual-summary",
+        "creative",
+        "image-generation"
+      ],
+      "author": "宝玉 (JimLiu)",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/baoyu-infographic",
+      "install": "hermes skill install baoyu-infographic"
+    },
+    {
+      "name": "claude-design",
+      "description": "Design one-off HTML artifacts (landing, deck, prototype).",
+      "tags": [
+        "design",
+        "html",
+        "prototype",
+        "ux",
+        "ui",
+        "creative",
+        "artifact",
+        "deck",
+        "motion",
+        "design-system"
+      ],
+      "author": "BadTechBandit",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/claude-design",
+      "install": "hermes skill install claude-design"
+    },
+    {
+      "name": "design-md",
+      "description": "Author/validate/export Google's DESIGN.md token spec files.",
+      "tags": [
+        "design",
+        "design-system",
+        "tokens",
+        "ui",
+        "accessibility",
+        "wcag",
+        "tailwind",
+        "dtcg",
+        "google"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/design-md",
+      "install": "hermes skill install design-md"
+    },
+    {
+      "name": "humanizer",
+      "description": "\"Humanize text: strip AI-isms and add real voice.\"",
+      "tags": [
+        "writing",
+        "editing",
+        "humanize",
+        "anti-ai-slop",
+        "voice",
+        "prose",
+        "text"
+      ],
+      "author": "Siqi Chen (@blader, https://github.com/blader/humanizer), ported by Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/humanizer",
+      "install": "hermes skill install humanizer"
+    },
+    {
+      "name": "manim-video",
+      "description": "\"Manim CE animations: 3Blue1Brown math/algo videos.\"",
+      "tags": [
+        "Manim",
+        "Animation",
+        "Math",
+        "Video"
+      ],
+      "author": "SHL0MS, Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/manim-video",
+      "install": "hermes skill install manim-video"
+    },
+    {
+      "name": "p5js",
+      "description": "\"p5.js sketches: gen art, shaders, interactive, 3D.\"",
+      "tags": [
+        "creative-coding",
+        "generative-art",
+        "p5js",
+        "canvas",
+        "interactive",
+        "visualization",
+        "webgl",
+        "shaders",
+        "animation"
+      ],
+      "author": "SHL0MS, Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/p5js",
+      "install": "hermes skill install p5js"
+    },
+    {
+      "name": "popular-web-designs",
+      "description": "54 real design systems (Stripe, Linear, Vercel) as HTML/CSS.",
+      "tags": [
+        "design",
+        "css",
+        "html",
+        "ui",
+        "web-development",
+        "design-systems",
+        "templates"
+      ],
+      "author": "Hermes Agent + Teknium (design systems sourced from VoltAgent/awesome-design-md)",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/popular-web-designs",
+      "install": "hermes skill install popular-web-designs"
+    },
+    {
+      "name": "songwriting-and-ai-music",
+      "description": "\"Songwriting craft and Suno AI music prompts.\"",
+      "tags": [
+        "songwriting",
+        "music",
+        "suno",
+        "parody",
+        "lyrics",
+        "creative"
+      ],
+      "author": "Teknium (teknium1), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "creative",
+      "path": "skills/creative/songwriting-and-ai-music",
+      "install": "hermes skill install songwriting-and-ai-music"
+    },
+    {
+      "name": "sdlc-review",
+      "description": "Review Kanban handoffs and route verified outcomes.",
+      "tags": [
+        "kanban",
+        "review",
+        "quality",
+        "verification"
+      ],
+      "author": "Jakub Wolniewicz (@frizikk) + Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "devops",
+      "path": "skills/devops/sdlc-review",
+      "install": "hermes skill install sdlc-review"
+    },
+    {
+      "name": "email-inbox-triage",
+      "description": "\"Triage an inbox: prioritize threads, draft replies safely.\"",
+      "tags": [
+        "Email",
+        "Inbox",
+        "Triage",
+        "Replies",
+        "Productivity"
+      ],
+      "author": "Ben Barclay (benbarclay), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "email",
+      "path": "skills/email/email-inbox-triage",
+      "install": "hermes skill install email-inbox-triage"
+    },
+    {
+      "name": "himalaya",
+      "description": "\"Himalaya CLI: IMAP/SMTP email from terminal.\"",
+      "tags": [
+        "Email",
+        "IMAP",
+        "SMTP",
+        "CLI",
+        "Communication"
+      ],
+      "author": "community",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "email",
+      "path": "skills/email/himalaya",
+      "install": "hermes skill install himalaya"
+    },
+    {
+      "name": "gif-search",
+      "description": "\"Search/download GIFs from Tenor via curl + jq.\"",
+      "tags": [
+        "GIF",
+        "Media",
+        "Search",
+        "Tenor",
+        "API"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "media",
+      "path": "skills/media/gif-search",
+      "install": "hermes skill install gif-search"
+    },
+    {
+      "name": "songsee",
+      "description": "\"Audio spectrograms/features (mel, chroma, MFCC) via CLI.\"",
+      "tags": [
+        "Audio",
+        "Visualization",
+        "Spectrogram",
+        "Music",
+        "Analysis"
+      ],
+      "author": "community",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "media",
+      "path": "skills/media/songsee",
+      "install": "hermes skill install songsee"
+    },
+    {
+      "name": "youtube-content",
+      "description": "\"YouTube transcripts to summaries, threads, blogs.\"",
+      "tags": [
+        "YouTube",
+        "Video",
+        "Transcripts",
+        "Media"
+      ],
+      "author": "Teknium (teknium1), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "media",
+      "path": "skills/media/youtube-content",
+      "install": "hermes skill install youtube-content"
+    },
+    {
+      "name": "whisper",
+      "description": "Transcribe and translate speech in 99 languages.",
+      "tags": [
+        "Whisper",
+        "Speech Recognition",
+        "ASR",
+        "Multimodal",
+        "Multilingual",
+        "OpenAI",
+        "Speech-To-Text",
+        "Transcription",
+        "Translation",
+        "Audio Processing"
+      ],
+      "author": "Orchestra Research",
+      "platforms": [
+        "linux",
+        "macos"
+      ],
+      "category": "mlops",
+      "path": "skills/mlops/whisper",
+      "install": "hermes skill install whisper"
+    },
+    {
+      "name": "obsidian",
+      "description": "Read, search, create, and edit notes in the Obsidian vault.",
+      "tags": [
+        "Obsidian",
+        "Notes",
+        "Markdown",
+        "Vault"
+      ],
+      "author": "Teknium (teknium1), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "note-taking",
+      "path": "skills/note-taking/obsidian",
+      "install": "hermes skill install obsidian"
+    },
+    {
+      "name": "airtable",
+      "description": "Airtable REST API via curl. Records CRUD, filters, upserts.",
+      "tags": [
+        "Airtable",
+        "Productivity",
+        "Database",
+        "API"
+      ],
+      "author": "community",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/airtable",
+      "install": "hermes skill install airtable"
+    },
+    {
+      "name": "box",
+      "description": "Box manages cloud files, sharing, search, and metadata.",
+      "tags": [
+        "Box",
+        "Productivity",
+        "Cloud Storage",
+        "Collaboration",
+        "Metadata",
+        "Content Extraction",
+        "CLI",
+        "SDK"
+      ],
+      "author": "Chris Kim (iskysun96), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/box",
+      "install": "hermes skill install box"
+    },
+    {
+      "name": "document-to-action-items",
+      "description": "\"Extract cited obligations, deadlines, tasks from documents.\"",
+      "tags": [
+        "Documents",
+        "OCR",
+        "Action-Items",
+        "Deadlines",
+        "Extraction"
+      ],
+      "author": "Ben Barclay (benbarclay), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/document-to-action-items",
+      "install": "hermes skill install document-to-action-items"
+    },
+    {
+      "name": "docx",
+      "description": "Create, read, edit, template, and review Word .docx files.",
+      "tags": [
+        "word",
+        "docx",
+        "documents",
+        "office",
+        "templates",
+        "revisions",
+        "comments"
+      ],
+      "author": "Nous Research",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/docx",
+      "install": "hermes skill install docx"
+    },
+    {
+      "name": "google-workspace",
+      "description": "\"Gmail, Calendar, Drive, Docs, Sheets via gws CLI or Python.\"",
+      "tags": [
+        "Google",
+        "Gmail",
+        "Calendar",
+        "Drive",
+        "Sheets",
+        "Docs",
+        "Contacts",
+        "Email",
+        "OAuth"
+      ],
+      "author": "Nous Research",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/google-workspace",
+      "install": "hermes skill install google-workspace"
+    },
+    {
+      "name": "maps",
+      "description": "\"Geocode, POIs, routes, timezones via OpenStreetMap/OSRM.\"",
+      "tags": [
+        "maps",
+        "geocoding",
+        "places",
+        "routing",
+        "distance",
+        "directions",
+        "nearby",
+        "location",
+        "openstreetmap",
+        "nominatim",
+        "overpass",
+        "osrm"
+      ],
+      "author": "Mibayy",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/maps",
+      "install": "hermes skill install maps"
+    },
+    {
+      "name": "meeting-action-items",
+      "description": "\"Turn meeting notes into cited decisions, owners, tickets.\"",
+      "tags": [
+        "Meetings",
+        "Action-Items",
+        "Follow-Up",
+        "Productivity"
+      ],
+      "author": "Ben Barclay (benbarclay), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/meeting-action-items",
+      "install": "hermes skill install meeting-action-items"
+    },
+    {
+      "name": "notion",
+      "description": "\"Notion API + ntn CLI: pages, databases, markdown, Workers.\"",
+      "tags": [
+        "Notion",
+        "Productivity",
+        "Notes",
+        "Database",
+        "API",
+        "CLI",
+        "Workers"
+      ],
+      "author": "community",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/notion",
+      "install": "hermes skill install notion"
+    },
+    {
+      "name": "pdf",
+      "description": "\"PDF files: create, read, merge, fill, OCR, edit text.\"",
+      "tags": [
+        "pdf",
+        "documents",
+        "forms",
+        "ocr",
+        "text-extraction",
+        "reportlab",
+        "pypdf",
+        "pdfplumber",
+        "pymupdf",
+        "marker"
+      ],
+      "author": "Nous Research",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/pdf",
+      "install": "hermes skill install pdf"
+    },
+    {
+      "name": "powerpoint",
+      "description": "Create, read, edit .pptx decks with python-pptx.",
+      "tags": [
+        "pptx",
+        "powerpoint",
+        "presentations",
+        "slides",
+        "office",
+        "python-pptx"
+      ],
+      "author": "Nous Research",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/powerpoint",
+      "install": "hermes skill install powerpoint"
+    },
+    {
+      "name": "product-price-monitor",
+      "description": "\"Watch product, flight, or listing prices; alert on target.\"",
+      "tags": [
+        "Prices",
+        "Availability",
+        "Shopping",
+        "Travel",
+        "Alerts"
+      ],
+      "author": "Ben Barclay (benbarclay), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/product-price-monitor",
+      "install": "hermes skill install product-price-monitor"
+    },
+    {
+      "name": "teams-meeting-pipeline",
+      "description": "Teams meeting summaries, job replay, Graph subscriptions.",
+      "tags": [
+        "Teams",
+        "Microsoft Graph",
+        "Meetings",
+        "Productivity",
+        "Operations"
+      ],
+      "author": "Hermes Agent + Teknium",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/teams-meeting-pipeline",
+      "install": "hermes skill install teams-meeting-pipeline"
+    },
+    {
+      "name": "weekly-review-planning",
+      "description": "\"Weekly reset: commitments, stalled work, next-week plan.\"",
+      "tags": [
+        "Weekly-Review",
+        "Planning",
+        "Tasks",
+        "Calendar",
+        "Productivity"
+      ],
+      "author": "Ben Barclay (benbarclay), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/weekly-review-planning",
+      "install": "hermes skill install weekly-review-planning"
+    },
+    {
+      "name": "xlsx",
+      "description": "Create, read, edit Excel .xlsx workbooks and CSVs.",
+      "tags": [
+        "excel",
+        "spreadsheet",
+        "xlsx",
+        "csv",
+        "openpyxl",
+        "productivity"
+      ],
+      "author": "Nous Research",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "productivity",
+      "path": "skills/productivity/xlsx",
+      "install": "hermes skill install xlsx"
+    },
+    {
+      "name": "arxiv",
+      "description": "\"Search arXiv papers by keyword, author, category, or ID.\"",
+      "tags": [
+        "Research",
+        "Arxiv",
+        "Papers",
+        "Academic",
+        "Science",
+        "API"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "research",
+      "path": "skills/research/arxiv",
+      "install": "hermes skill install arxiv"
+    },
+    {
+      "name": "competitor-news-monitor",
+      "description": "\"Watch named companies for material news; cited digests.\"",
+      "tags": [
+        "Competitors",
+        "News",
+        "Market-Research",
+        "Monitoring"
+      ],
+      "author": "Ben Barclay (benbarclay), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "research",
+      "path": "skills/research/competitor-news-monitor",
+      "install": "hermes skill install competitor-news-monitor"
+    },
+    {
+      "name": "grounded-citations",
+      "description": "\"Ground answers and documents in cited, verifiable sources.\"",
+      "tags": [
+        "Research",
+        "Citations",
+        "Grounding",
+        "Sources",
+        "Web",
+        "Reports"
+      ],
+      "author": "Hermes Agent + Teknium",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "research",
+      "path": "skills/research/grounded-citations",
+      "install": "hermes skill install grounded-citations"
+    },
+    {
+      "name": "llm-wiki",
+      "description": "\"Karpathy's LLM Wiki: build/query interlinked markdown KB.\"",
+      "tags": [
+        "wiki",
+        "knowledge-base",
+        "research",
+        "notes",
+        "markdown",
+        "rag-alternative"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "research",
+      "path": "skills/research/llm-wiki",
+      "install": "hermes skill install llm-wiki"
+    },
+    {
+      "name": "xurl",
+      "description": "\"X/Twitter via xurl CLI: raw post search, posting, DM, media.\"",
+      "tags": [
+        "twitter",
+        "x",
+        "social-media",
+        "xurl",
+        "official-api"
+      ],
+      "author": "xdevplatform + openclaw + Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos"
+      ],
+      "category": "social-media",
+      "path": "skills/social-media/xurl",
+      "install": "hermes skill install xurl"
+    },
+    {
+      "name": "codebase-inspection",
+      "description": "\"Inspect codebases w/ pygount: LOC, languages, ratios.\"",
+      "tags": [
+        "LOC",
+        "Code Analysis",
+        "pygount",
+        "Codebase",
+        "Metrics",
+        "Repository"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/codebase-inspection",
+      "install": "hermes skill install codebase-inspection"
+    },
+    {
+      "name": "dogfood",
+      "description": "\"Exploratory QA of web apps: find bugs, evidence, reports.\"",
+      "tags": [
+        "qa",
+        "testing",
+        "browser",
+        "web",
+        "dogfood"
+      ],
+      "author": "Teknium (teknium1), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/dogfood",
+      "install": "hermes skill install dogfood"
+    },
+    {
+      "name": "github",
+      "description": "\"GitHub via gh CLI: PRs, issues, reviews, repos, auth.\"",
+      "tags": [
+        "github",
+        "gh",
+        "git",
+        "pull-requests",
+        "issues",
+        "code-review",
+        "repos",
+        "auth",
+        "ci"
+      ],
+      "author": "Ben Barclay (benbarclay), Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/github",
+      "install": "hermes skill install github"
+    },
+    {
+      "name": "hermes-agent-skill-authoring",
+      "description": "\"Author in-repo SKILL.md files: frontmatter and structure.\"",
+      "tags": [
+        "skills",
+        "authoring",
+        "hermes-agent",
+        "conventions",
+        "skill-md"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/hermes-agent-skill-authoring",
+      "install": "hermes skill install hermes-agent-skill-authoring"
+    },
+    {
+      "name": "inspecting-hermes-desktop-dom",
+      "description": "\"Read the live Hermes desktop DOM/CSS over CDP.\"",
+      "tags": [
+        "desktop",
+        "electron",
+        "cdp",
+        "dom",
+        "ui-verification",
+        "self-inspection"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/inspecting-hermes-desktop-dom",
+      "install": "hermes skill install inspecting-hermes-desktop-dom"
+    },
+    {
+      "name": "node-inspect-debugger",
+      "description": "\"Debug Node.js via --inspect + Chrome DevTools Protocol CLI.\"",
+      "tags": [
+        "debugging",
+        "nodejs",
+        "node-inspect",
+        "cdp",
+        "breakpoints",
+        "ui-tui"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/node-inspect-debugger",
+      "install": "hermes skill install node-inspect-debugger"
+    },
+    {
+      "name": "python-debugpy",
+      "description": "\"Debug Python: pdb REPL + debugpy remote (DAP).\"",
+      "tags": [
+        "debugging",
+        "python",
+        "pdb",
+        "debugpy",
+        "breakpoints",
+        "dap",
+        "post-mortem"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/python-debugpy",
+      "install": "hermes skill install python-debugpy"
+    },
+    {
+      "name": "requesting-code-review",
+      "description": "\"Pre-commit review: security scan, quality gates, auto-fix.\"",
+      "tags": [
+        "code-review",
+        "security",
+        "verification",
+        "quality",
+        "pre-commit",
+        "auto-fix"
+      ],
+      "author": "Hermes Agent (adapted from obra/superpowers + MorAlekss)",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/requesting-code-review",
+      "install": "hermes skill install requesting-code-review"
+    },
+    {
+      "name": "simplify-code",
+      "description": "\"Parallel 4-agent cleanup of recent code changes.\"",
+      "tags": [
+        "code-review",
+        "cleanup",
+        "refactor",
+        "delegation",
+        "subagent",
+        "parallel",
+        "simplify"
+      ],
+      "author": "Hermes Agent (inspired by Claude Code /simplify)",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/simplify-code",
+      "install": "hermes skill install simplify-code"
+    },
+    {
+      "name": "spike",
+      "description": "\"Throwaway experiments to validate an idea before build.\"",
+      "tags": [
+        "spike",
+        "prototype",
+        "experiment",
+        "feasibility",
+        "throwaway",
+        "exploration",
+        "research",
+        "planning",
+        "mvp",
+        "proof-of-concept"
+      ],
+      "author": "Hermes Agent (adapted from gsd-build/get-shit-done)",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/spike",
+      "install": "hermes skill install spike"
+    },
+    {
+      "name": "systematic-debugging",
+      "description": "\"4-phase root cause debugging: understand bugs before fixing.\"",
+      "tags": [
+        "debugging",
+        "troubleshooting",
+        "problem-solving",
+        "root-cause",
+        "investigation"
+      ],
+      "author": "Hermes Agent (adapted from obra/superpowers)",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/systematic-debugging",
+      "install": "hermes skill install systematic-debugging"
+    },
+    {
+      "name": "test-driven-development",
+      "description": "\"TDD: enforce RED-GREEN-REFACTOR, tests before code.\"",
+      "tags": [
+        "testing",
+        "tdd",
+        "development",
+        "quality",
+        "red-green-refactor"
+      ],
+      "author": "Hermes Agent (adapted from obra/superpowers)",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "software-development",
+      "path": "skills/software-development/test-driven-development",
+      "install": "hermes skill install test-driven-development"
+    },
+    {
+      "name": "blocked-page-recovery",
+      "description": "\"Use when a fetch fails: 403/429, paywall, WAF, bot wall.\"",
+      "tags": [
+        "Research",
+        "Archives",
+        "Wayback",
+        "Paywall",
+        "WAF",
+        "Fallback"
+      ],
+      "author": "Hermes Agent",
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "category": "web",
+      "path": "skills/web/blocked-page-recovery",
+      "install": "hermes skill install blocked-page-recovery"
+    }
+  ]
+}

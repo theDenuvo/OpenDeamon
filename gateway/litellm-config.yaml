@@ -1,0 +1,48 @@
+model_list:
+- model_name: opendeamon
+  litellm_params:
+    model: openai/hermes-hands
+    api_base: http://host.docker.internal:9131/v1
+    api_key: dummy-local-bridge
+    timeout: 600
+- model_name: od-chat
+  litellm_params:
+    model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+    api_key: os.environ/OPENROUTER_API_KEY
+    timeout: 120
+- model_name: od-groq
+  litellm_params:
+    model: groq/openai/gpt-oss-120b
+    api_key: os.environ/GROQ_API_KEY
+    timeout: 120
+    extra_headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+- model_name: od-fb1
+  litellm_params:
+    model: openrouter/inclusionai/ling-3.0-flash-sante:free
+    api_key: os.environ/OPENROUTER_API_KEY
+    timeout: 120
+- model_name: od-fb2
+  litellm_params:
+    model: openai/gpt-oss-20b
+    api_base: https://text.pollinations.ai/openai
+    api_key: dummy-keyless-lane
+    timeout: 120
+router_settings:
+  fallbacks:
+  - opendeamon:
+    - od-chat
+    - od-groq
+    - od-fb2
+    - od-fb1
+  - od-chat:
+    - od-groq
+    - od-fb2
+    - od-fb1
+  - od-groq:
+    - od-fb2
+    - od-fb1
+general_settings:
+  num_retries: 1
+  request_timeout: 120
+  fallbacks_strict: false

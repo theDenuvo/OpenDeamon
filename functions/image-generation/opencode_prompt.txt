@@ -1,0 +1,38 @@
+Create a Python tool/module: image-generation
+
+Description: generate images from text, free keyless
+
+
+Requirements:
+{
+  "description": "generate images from text, free keyless",
+  "must_have": [
+    "free",
+    "keyless"
+  ],
+  "interface": {},
+  "constraints": [
+    "free",
+    "keyless",
+    "open_source"
+  ]
+}
+
+
+
+Constraints:
+- Single Python file (or minimal package)
+- No external dependencies beyond stdlib + requests (if HTTP needed)
+- All configuration via environment variables (no hardcoded keys)
+- Free/keyless only — no paid APIs
+- Must run on Windows (Python 3.11+)
+- Output: ONLY the implementation file(s), no explanations
+
+Structure:
+- Main function/class matching the interface
+- If HTTP: use requests with timeout, proper error handling
+- If CLI wrapper: use subprocess with proper escaping
+- Include __main__ block for quick manual test
+- Follow the existing autonomous-tools patterns
+
+Acceptance: All test cases must pass when run.

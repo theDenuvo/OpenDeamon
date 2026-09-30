@@ -1,0 +1,78 @@
+# OpenDeamon — Hermes configuration (managed by free-rank).
+# OPENROUTER_API_KEY via environment, never stored here.
+model:
+  provider: openrouter
+  default: nvidia/nemotron-3-super-120b-a12b:free
+fallback_providers:
+  - provider: openrouter
+    model: inclusionai/ling-3.0-flash-sante:free
+  - provider: openrouter
+    model: nvidia/nemotron-3-ultra-550b-a55b:free
+  - provider: openrouter
+    model: nvidia/nemotron-3.5-lightning:free
+auxiliary:
+  vision:
+    provider: openrouter
+    model: dots-studio/dots-3-note-preview:free
+    fallback_chain:
+      - provider: openrouter
+        model: qwen/qwen3.8-27b:free
+      - provider: openrouter
+        model: google/gemma-4-31b-it:free
+skills:
+  external_dirs:
+    - A:/OpenDeamon/functions
+delegation:
+  model: nvidia/nemotron-3-super-120b-a12b:free
+  provider: openrouter
+timezone: ''
+display:
+  message_reactions: true
+  pet:
+    enabled: true
+    slug: 'roubao'
+    scale: 0.3
+_config_version: 46
+moa:
+  presets:
+    default:
+      reference_models:
+        - provider: openrouter
+          model: nvidia/nemotron-3-ultra-550b-a55b:free
+          enabled: true
+        - provider: openrouter
+          model: nvidia/nemotron-3-super-120b-a12b:free
+          enabled: true
+      degraded_reference_policy: loud
+      fanout: user_turn
+      aggregator:
+        model: nvidia/nemotron-3.5-lightning:free
+  reference_models:
+    - provider: openrouter
+      model: nvidia/nemotron-3-ultra-550b-a55b:free
+      enabled: true
+    - provider: openrouter
+      model: nvidia/nemotron-3-super-120b-a12b:free
+      enabled: true
+  aggregator:
+    provider: openrouter
+    model: nvidia/nemotron-3.5-lightning:free
+  degraded_reference_policy: loud
+  fanout: user_turn
+  enabled: true
+approvals:
+  mode: "off"
+  cron_mode: auto
+  single_query_mode: auto
+  unattended_mode: auto
+  mcp_reload_confirm: false
+  destructive_slash_confirm: false
+web:
+  search_backend: searxng
+hooks:
+  pre_tool_call:
+    - matcher: "terminal|write_file|patch|edit|code_execution|execute_code|delegate_task"
+      prompt: "delegate-first: code tools are blocked on purpose. Hand coding to the opencode CLI worker with one 'opencode run -m opencode/space-bunny-free ...' terminal call, then verify by running the tests."
+      command: "py -u A:/OpenDeamon/functions/delegate-first/pre_tool_budget.py"
+      timeout: 10
+hooks_auto_accept: true

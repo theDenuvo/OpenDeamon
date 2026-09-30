@@ -1,0 +1,1 @@
+Stress test marker: OpenDeamon core stress test executed 2026-09-29. Verified reasoning→native tools, subagents, config, opencode permission issue, vision 429 fallback limitation.

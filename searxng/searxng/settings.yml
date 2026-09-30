@@ -1,0 +1,131 @@
+# SearXNG Configuration — optimized for quality search with Hermes
+# Read the full docs: https://docs.searxng.org/admin/settings/
+
+use_default_settings: true
+
+# ── Instance identity ──────────────────────────────────────────
+general:
+  instance_name: "Hermes Search"
+  debug: false
+  privacypolicy_url: false
+  contact_url: false
+  enable_metrics: false
+  strict_host_token: true
+
+# ── Server ─────────────────────────────────────────────────────
+server:
+  secret_key: "c912b1592a38b55c48a1da3b5fdb62bec986a78304dcc0ad7cffa7936c839523"
+  bind_address: "0.0.0.0"
+  port: 8080
+  base_url: "http://localhost:8888/"
+  image_proxy: true
+  http_protocol_version: "1.1"
+  method: "POST"
+  limiter: false
+  public_instance: false
+
+# ── Redis/Valkey for limiter & cache ───────────────────────────
+redis:
+  url: "redis://valkey:6379/0"
+
+# ── Outgoing requests ──────────────────────────────────────────
+outgoing:
+  request_timeout: 5.0
+  max_request_timeout: 15.0
+  pool_connections: 100
+  pool_maxsize: 20
+  useragent_suffix: "hermes@localhost"
+
+# ── Search behavior ────────────────────────────────────────────
+search:
+  safe_search: 0          # 0=off, 1=moderate, 2=strict
+  autocomplete: ""        # empty = off (privacy); set to "google" if you want
+  default_lang: "ru"      # Hermes user's language
+  formats:
+    - html
+    - json                # required for Hermes API
+  request_delay: 1.5      # polite delay between upstream queries
+  ban_time_on_fail: 60    # ban engine 60s on failure
+  max_ban_time_on_fail: 300
+
+# ── Engines — quality over quantity ────────────────────────────
+# Curated list: best coverage, least noise, most reliable
+engines:
+  # ── General web ──
+  - name: brave
+    engine: brave
+    shortcut: brave
+    disabled: false
+    categories: [general]
+
+  - name: startpage
+    engine: startpage
+    shortcut: sp
+    disabled: false
+    categories: [general]
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+    categories: [general]
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+    categories: [general]
+    language: ru
+
+  - name: bing
+    engine: bing
+    shortcut: bing
+    disabled: false
+    categories: [general]
+
+  # ── Code & dev ──
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+    categories: [code]
+
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: so
+    disabled: false
+    categories: [code]
+
+  # ── Science & papers ──
+  - name: arxiv
+    engine: arxiv
+    shortcut: arxiv
+    disabled: false
+    categories: [science]
+
+  - name: pubmed
+    engine: pubmed
+    shortcut: pubmed
+    disabled: false
+    categories: [science]
+
+  # ── Disabled: noisy or unreliable ──
+  - name: yahoo
+    disabled: true
+  - name: yandex
+    disabled: true
+  - name: qwant
+    disabled: true
+  - name: mojeek
+    disabled: true
+
+# ── UI ─────────────────────────────────────────────────────────
+ui:
+  static_use_hash: true
+  default_theme: simple
+  default_theme_style: dark
+  query_in_title: false
+  infinite_scroll: false
+  results_on_new_tab: false
+  center_alignment: false
+

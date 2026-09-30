@@ -1,0 +1,10 @@
+{
+  "approvals": [
+    {
+      "approved_at": "2026-09-29T18:57:22.084936Z",
+      "command": "py -u A:/OpenDeamon/functions/delegate-first/pre_tool_budget.py",
+      "event": "pre_tool_call",
+      "script_mtime_at_approval": "2026-09-29T18:50:36.581155Z"
+    }
+  ]
+}
