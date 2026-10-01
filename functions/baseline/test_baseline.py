@@ -311,30 +311,39 @@ def test_private_store_is_outside_the_repo():
     Проверяется на НАСТОЯЩЕМ HERMES_HOME, а не на временном: временный
     каталог тестов не лежит в git-репозитории, и repo_root_from() для
     него честно вернёт пусто - такой тест ничего бы не утверждал.
+
+    Если HERMES_HOME не задан, группа ПРОПУСКАЕТСЯ, а не падает: иначе
+    набор ломается в обычной оболочке, и «красный» перестаёт значить
+    «слой сломан». Пропуск должен быть виден в выводе.
     """
     fails = []
+    skipped = []
     old_home = os.environ.get("HERMES_HOME")
     old_dir = os.environ.get("HERMES_BASELINE_PRIVATE_DIR")
     os.environ.pop("HERMES_BASELINE_PRIVATE_DIR", None)
     try:
         if not old_home:
-            return ["HERMES_HOME is not set - cannot test real placement"]
-        root = bl.repo_root_from(old_home)
-        if not root:
-            return ["real HERMES_HOME is not inside a git repo"]
-        priv = bl.private_root()
-        if bl.is_within(priv, root):
-            fails.append("private_root %s is inside the repo %s" % (priv, root))
-        # Worktree лежит внутри репозитория, поэтому относительный путь
-        # от него обязан уходить вверх, а не вести внутрь.
-        wt = os.path.join(root, ".worktrees", "probe")
-        rel = os.path.relpath(priv, wt)
-        if not rel.startswith(".."):
-            fails.append("private_root is reachable from a worktree: %s" % rel)
+            skipped.append("HERMES_HOME is not set")
+        else:
+            root = bl.repo_root_from(old_home)
+            if not root:
+                skipped.append("real HERMES_HOME is not inside a git repo")
+            else:
+                priv = bl.private_root()
+                if bl.is_within(priv, root):
+                    fails.append("private_root %s is inside the repo %s"
+                                 % (priv, root))
+                # Worktree лежит внутри репозитория, поэтому относительный
+                # путь от него обязан уходить вверх, а не вести внутрь.
+                wt = os.path.join(root, ".worktrees", "probe")
+                rel = os.path.relpath(priv, wt)
+                if not rel.startswith(".."):
+                    fails.append("private_root is reachable from a worktree: %s"
+                                 % rel)
     finally:
         if old_dir is not None:
             os.environ["HERMES_BASELINE_PRIVATE_DIR"] = old_dir
-    return fails
+    return fails, skipped
 
 
 # --------------------------------------------------------------------------
@@ -1198,6 +1207,7 @@ def main() -> int:
         return 2
 
     failed = 0
+    skipped = 0
     for label, fn in TESTS:
         try:
             fails = fn() or []
@@ -1205,19 +1215,29 @@ def main() -> int:
             fails = ["assertion: %s" % exc]
         except Exception as exc:                               # noqa: BLE001
             fails = ["%s: %s" % (type(exc).__name__, exc)]
+        # Группа может вернуть (fails, skipped): пропуск - это не падение,
+        # но он обязан быть виден, иначе «тихо зелёный» набор врёт.
+        notes = []
+        if isinstance(fails, tuple):
+            fails, notes = list(fails[0]), list(fails[1] or [])
         if fails:
             failed += 1
             print("FAIL  %s" % label)
             for line in fails:
                 print("        - %s" % line)
+        elif notes:
+            skipped += 1
+            print("skip  %s (%s)" % (label, "; ".join(notes)))
         else:
             print("pass  %s" % label)
 
     print()
+    if skipped:
+        print("%d group(s) skipped" % skipped)
     if failed:
         print("%d/%d groups failed" % (failed, len(TESTS)))
         return 1
-    print("all pass (%d groups)" % len(TESTS))
+    print("all pass (%d groups)" % (len(TESTS) - skipped))
     return 0
 
 
