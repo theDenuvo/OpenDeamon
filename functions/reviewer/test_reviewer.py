@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _FUNCTIONS = os.path.dirname(_HERE)
@@ -640,17 +641,38 @@ def test_broken_input_never_crashes():
 
 @test
 def test_no_review_verdict_is_reported_as_failure_not_pass():
-    """Если рецензент не ответил, это не «всё хорошо» и не тихий PASS."""
+    """Если рецензент не ответил, это не «всё хорошо» и не тихий PASS.
+
+    Транспорт здесь подменён: тест полагался на то, что сети нет и вызов
+    провалится. На сквозном прогоне с ключами в окружении вызов ПРОШЁЛ и вернул
+    настоящий REJECT на фиктивный коммит - то есть тест зависел от внешнего
+    состояния и молча проверял не то. Наличие ключа теперь не влияет."""
     fails = []
-    res = rv.review(rv.build_capsule(tempfile.gettempdir(), "deadbeef"),
-                    routes=("nim",))
-    if res.get("ok") is True:
-        fails.append("a review with no verdict reported ok")
-    if res.get("verdict") is not None:
-        fails.append("a verdict was invented: %r" % res.get("verdict"))
-    if "REVIEW NO VERDICT" not in rv.render(res):
-        fails.append("render does not say NO VERDICT")
-    return fails
+    orig = rv._post
+
+    def refuse(url, key, payload, timeout):
+        raise urllib.error.HTTPError(url, 503, "overloaded", {}, None)
+
+    env_backup = {k: os.environ.get(k)
+                  for k in ("NVIDIA_API_KEY", "GROQ_API_KEY")}
+    try:
+        rv._post = refuse
+        res = rv.review(rv.build_capsule(tempfile.gettempdir(), "deadbeef"),
+                        routes=("nim",))
+        if res.get("ok") is True:
+            fails.append("a review with no verdict reported ok")
+        if res.get("verdict") is not None:
+            fails.append("a verdict was invented: %r" % res.get("verdict"))
+        if "REVIEW NO VERDICT" not in rv.render(res):
+            fails.append("render does not say NO VERDICT")
+        return fails
+    finally:
+        rv._post = orig
+        for k, v in env_backup.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 @test

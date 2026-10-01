@@ -264,8 +264,17 @@ def test_worker_cannot_read_the_ledger():
                 fails.append("ledger stored outside the barrier state dir")
             if not os.path.exists(ledger):
                 fails.append("ledger file does not exist")
-            if env.home not in ledger:
-                fails.append("ledger %s is not under HERMES_HOME" % ledger)
+            # Инвариант сегодня: приватное хранилище - ЗА пределом
+            # репозитория. Раньше здесь стояло требование «под HERMES_HOME»,
+            # и оно стало неверным после того, как хранилище вынесли
+            # наружу: worktree лежит внутри репозитория, поэтому любой
+            # внутрирепозиторный каталог достижим из него через ..\..\.
+            if bl.repo_root_from(ledger):
+                fails.append("ledger %s is inside the git repository %s"
+                             % (ledger, bl.repo_root_from(ledger)))
+            if not os.path.basename(ledger).endswith(".ledger.json"):
+                fails.append("ledger does not carry the expected suffix: %s"
+                             % ledger)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     return fails
@@ -524,8 +533,13 @@ def test_shadow_store_does_not_touch_the_project():
             branches = bl.git(["for-each-ref", "--format=%(refname)",
                                "refs/heads"], cwd=root)[1].split()
             store = bl.store_dir(root)
-            if not store.startswith(bl.home()):
-                fails.append("store %s is outside HERMES_HOME" % store)
+            # Теневой store обязан быть ЗА пределом репозитория: он лежит
+            # внутри worktree, поэтому любой внутрирепозиторный путь
+            # достижим из него. Прежняя проверка требовала «под HERMES_HOME»,
+            # что стало неверным после выноса хранилища наружу.
+            if bl.repo_root_from(store):
+                fails.append("store %s is inside the git repository %s"
+                             % (store, bl.repo_root_from(store)))
             if bl.is_within(store, root):
                 fails.append("store landed inside the project")
             if bl.head_commit(root) != head_before:
