@@ -99,6 +99,10 @@ HEAVY_SKIP = frozenset({
     ".pytest_cache", ".mypy_cache", ".ruff_cache", "cache", "caches",
     "models", "venvs", "venv", ".venv", "env", "owui", "desktop",
     "gateway", "tools", "searxng", "data", "logs", "logs_tmp", "tmp",
+    # Мои черновики и стенды. gitignored, но в песочницу попадали, а
+    # `_setup_tmp/*_test.py` содержат скрипты, рассчитанные на живое
+    # окружение, и падают в чистом прогоне.
+    "_setup_tmp",
 })
 COPY_SKIP = frozenset({".git", ".mechanical", "__pycache__", ".worktrees",
                        "node_modules", ".pytest_cache"})
@@ -209,16 +213,24 @@ def check_tampering(ledger: dict, root: str) -> dict:
 
 # --- чистый прогон в отдельной папке ---------------------------------
 
-def _commands(spec: dict | None, sandbox: str) -> list[list[str]]:
+def _commands(spec: dict | None, sandbox: str,
+              declared: list[str] | None = None) -> list[list[str]]:
     """Команды чистого прогона.
 
-    Дефолт - запуск КАЖДОГО найденного тестового файла как скрипта, а не
-    `unittest discover`. Причина замеренная: discover собирает только
-    подклассы unittest.TestCase, а наборы этого проекта - обычные функции с
-    собственным раннером, поэтому discover честно рапортует "NO TESTS RAN" и
-    выходит с кодом 5. Зелёного результата не существует, а барьер обязан
-    что-то проверять по-настоящему.
-    """
+    Порядок выбора области:
+      1. команды из критериев спеки - если критерий что-то объявил;
+      2. ТЕСТЫ, объявленные в LEDGER, - то есть ровно то, что этот слой
+         защищает. Это не произвол: барьер уже хэшировал эти файлы, и прогонять
+         надо именно их;
+      3. если объявлено нечего - не запускается НИЧЕГО, и это видно по
+         пустому списку запусков, а не выдаётся за зелёный результат.
+
+    Раньше область выбиралась как «все файлы, похожие на тест». На живом
+    прогоне это дало 26 запусков, включая сломанные тесты скиллов Hermes,
+    .js-файлы, запущенные интерпретатором Python, и мои черновики в
+    _setup_tmp. Провал чужого набора выглядел бы как провал этого проекта,
+    а зелёный результат означал бы «кто-то чужой прошёл», а не «наш проект
+    цел». Лучше не запускать вовсе и сказать об этом, чем мерить чужое."""
     cmds: list[list[str]] = []
     if spec:
         for crit in spec.get("criteria") or []:
@@ -227,14 +239,11 @@ def _commands(spec: dict | None, sandbox: str) -> list[list[str]]:
                 cmds.append(split_check(check))
     if cmds:
         return cmds
-    for dirpath, dirnames, filenames in os.walk(sandbox):
-        dirnames[:] = [d for d in dirnames if d not in COPY_SKIP]
-        for name in sorted(filenames):
-            rel = os.path.relpath(os.path.join(dirpath, name), sandbox)
-            if bl.is_test_file(rel.replace("\\", "/")):
-                cmds.append([sys.executable, rel.replace("/", os.sep)])
-    if not cmds:
-        cmds = [[sys.executable, "-m", "unittest", "discover", "-q"]]
+    for rel in (declared or []):
+        rel = str(rel)
+        if not rel.endswith(".py"):
+            continue
+        cmds.append([sys.executable, rel.replace("/", os.sep)])
     return cmds
 
 
@@ -344,7 +353,8 @@ def execute_criteria(spec: dict | None, worktree: str,
 
 
 def run_clean(worktree: str, spec: dict | None = None,
-              timeout: int = RUN_TIMEOUT) -> dict:
+              timeout: int = RUN_TIMEOUT,
+              declared: list[str] | None = None) -> dict:
     """Общий прогон наборов в ОТДЕЛЬНОМ каталоге, с кодом возврата и логом.
 
     Это регрессионная страховка, а не доказательство критериев: доказательства
@@ -354,13 +364,16 @@ def run_clean(worktree: str, spec: dict | None = None,
 
     sandbox, copy_info = _sandbox(worktree)
     results = []
-    for cmd in _commands(spec, sandbox):
+    for cmd in _commands(spec, sandbox, declared):
         results.append(_exec(cmd, sandbox, timeout, "run-%d.log" % len(results)))
     return {
         "sandbox": sandbox,
         "separate_dir": True,
         "copy": copy_info,
         "runs": results,
+        "scope": ("declared criteria" if spec
+                 else "tests from the baseline ledger" if declared
+                 else "NOTHING: no criteria and no ledger tests"),
         "all_passed": all(r["exit_code"] == 0 for r in results),
     }
 
@@ -520,8 +533,19 @@ def run(ledger_path: str, worktree: str, spec: dict | None = None,
                                    "not proven: %s" % names]})
         return result
 
-    clean = run_clean(worktree, spec=spec)
+    clean = run_clean(worktree, spec=spec,
+                      declared=sorted((led.get("tests") or {}).keys()))
     result["clean_run"] = clean
+    if not clean["runs"]:
+        # Ничего не объявлено и запускать нечего. Это НЕ «всё зелёное»:
+        # пустой прогон не доказывает ничего, и выглядеть он не должен так,
+        # будто что-то проверялось.
+        result.update({"passed": False, "kind": "NOTHING_VERIFIED",
+                       "action": "REWORK_SPEC", "rerun_allowed": True,
+                       "status_after": "judged",
+                       "reasons": ["nothing was executed: %s"
+                                   % clean.get("scope", "no scope")]})
+        return result
     if not clean["all_passed"]:
         verdict = classify_run(clean)
         result.update({"passed": False, "kind": verdict["kind"],
