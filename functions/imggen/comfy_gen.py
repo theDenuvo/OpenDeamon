@@ -53,6 +53,7 @@ Q_VAE = "qwen_image_2.1_vae_bf16.safetensors"
 # reaped when nothing has asked for a while.
 IDLE_SHUTDOWN_S = int(os.environ.get("COMFY_IDLE_SHUTDOWN_S", "900"))
 LAST_USE = Path(os.environ.get("HERMES_HOME", r"A:\OpenDeamon\hermes-home")) / "cache" / "comfy-last-use"
+PIDFILE = Path(os.environ.get("HERMES_HOME", r"A:\OpenDeamon\hermes-home")) / "cache" / "comfy.pid"
 LOG = Path(os.environ.get("HERMES_HOME", r"A:\OpenDeamon\hermes-home")) / "cache" / "comfy-server.log"
 # ComfyUI reads diffusion models from several legacy dirs; the current one is
 # diffusion_models, and hardcoding a single path silently found nothing.
@@ -187,6 +188,11 @@ def _start_server() -> bool:
         raise RuntimeError(f"ComfyUI venv missing: {python}")
     if not (COMFY_ROOT / "main.py").is_file():
         raise RuntimeError(f"ComfyUI not installed at {COMFY_ROOT}")
+    if server_alive():
+        # Already serving. Launching a second instance would leave it unable to
+        # bind :8188 while we recorded its PID as "ours" - and the recorded PID
+        # would die immediately, so the reaper could never stop the real server.
+        return True
     LOG.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         str(python), "-s", "main.py",
@@ -200,16 +206,27 @@ def _start_server() -> bool:
     logf = open(LOG, "a", encoding="utf-8", errors="replace")
     logf.write(f"\n=== launch {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
     logf.flush()
-    subprocess.Popen(
+    proc = subprocess.Popen(
         cmd, cwd=str(COMFY_ROOT), stdout=logf, stderr=subprocess.STDOUT,
         creationflags=CREATE_NO_WINDOW,
     )
+    # Remember the PID so shutdown can target THIS process. An earlier
+    # revision used `taskkill /F /IM python.exe`, which kills every python on
+    # the box - including the ultrasearch MCP server and the daemon on :8100.
+    # A lifecycle hook must never take out unrelated processes.
+    try:
+        PIDFILE.parent.mkdir(parents=True, exist_ok=True)
+        PIDFILE.write_text(str(proc.pid), encoding="utf-8")
+    except OSError:
+        pass
     # Startup measured on this box: ~100-120 s from launch to "Starting server"
     # (plugin setup plus comfy_kitchen backend probing). A 60 s wait killed the
     # server mid-boot and the client saw an instant failure.
     for _ in range(240):                     # up to 4 min
         if server_alive():
             return True
+        if proc.poll() is not None:
+            return False
         time.sleep(1)
     return False
 
@@ -224,13 +241,78 @@ def _spawn_idle_reaper() -> None:
         return
     try:
         subprocess.Popen(
-            [sys.executable, __file__, "--reaper",
-             str(IDLE_SHUTDOWN_S)],
+            [sys.executable, __file__, "--reaper", str(IDLE_SHUTDOWN_S)],
             creationflags=CREATE_NO_WINDOW,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
     except Exception:
         pass
+
+
+def _port_owner_pid(port: int = 8188) -> int | None:
+    """PID listening on `port`, via netstat (native, no deprecation).
+
+    Used instead of `wmic process`, which is removed on current Windows and
+    silently returned nothing - which made the safety guard in _stop_server()
+    refuse to kill anything.
+    """
+    try:
+        out = subprocess.run(["netstat", "-ano", "-p", "TCP"],
+                             capture_output=True, text=True, timeout=30).stdout
+    except Exception:
+        return None
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[0].upper() == "TCP" and \
+                parts[1].endswith(f":{port}") and parts[3] == "LISTENING":
+            try:
+                return int(parts[4])
+            except ValueError:
+                return None
+    return None
+
+
+def _cmdline(pid: int) -> str:
+    try:
+        return subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}' "
+             f"-ErrorAction SilentlyContinue).CommandLine"],
+            capture_output=True, text=True, timeout=45).stdout or ""
+    except Exception:
+        return ""
+
+
+def _is_comfy(pid: int) -> bool:
+    cmd = _cmdline(pid)
+    return "ComfyUI" in cmd or "main.py" in cmd
+
+
+def _stop_server() -> None:
+    """Stop only ComfyUI, by the PID that owns the port. Never by image name.
+
+    An earlier revision used `taskkill /F /IM python.exe`, which kills every
+    python process on the box - the ultrasearch MCP server and the daemon on
+    :8100 included. A lifecycle hook must never do that.
+    """
+    targets: set[int] = set()
+    owner = _port_owner_pid()
+    if owner and _is_comfy(owner):
+        targets.add(owner)
+    try:
+        recorded = int(PIDFILE.read_text(encoding="utf-8").strip())
+        if recorded and _is_comfy(recorded):
+            targets.add(recorded)
+    except (OSError, ValueError):
+        pass
+    for pid in targets:
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                       capture_output=True)
+    if targets:
+        try:
+            PIDFILE.unlink()
+        except OSError:
+            pass
 
 
 def _idle_reaper(seconds: int) -> int:
@@ -245,8 +327,7 @@ def _idle_reaper(seconds: int) -> int:
         if time.time() - last < seconds:
             deadline = time.time() + seconds      # someone asked again
     if server_alive():
-        subprocess.run(["taskkill", "/F", "/IM", "python.exe"],
-                       capture_output=True)
+        _stop_server()
     return 0
 
 
@@ -336,6 +417,12 @@ def generate(prompt: str, out: str, steps: int = 20,
         raise RuntimeError(f"VAE missing: {DEFAULT_VAE_DIR / Q_VAE}")
     preflight()                      # every run, not just cold start
     server_state = ensure_server()
+    # Arm the reaper up front, so a crashed run cannot leave the server
+    # resident forever. It was defined and never called for a whole session,
+    # and ComfyUI then held ~17 GB RAM indefinitely - the same "declared but
+    # not wired" class as the hook matcher that never fired.
+    _spawn_idle_reaper()
+    _touch_last_use()
     seed = seed if seed is not None else int(time.time() * 1000) % (2**32)
     wf = build_workflow(model, prompt, steps, size[0], size[1], seed)
     client_id = str(uuid.uuid4())

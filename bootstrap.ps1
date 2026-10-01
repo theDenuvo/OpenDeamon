@@ -49,7 +49,10 @@ try {
   $c.Close()
 } catch { }
 
-# Load OpenRouter key in-process from the pre-existing secrets file.
+# Load cloud keys in-process from the pre-existing secrets files.
+# Nothing is printed, logged, or written to disk.
+#
+# OpenRouter lives in A:\AI\daemon\config\secrets.local.toml ([openrouter].api_key).
 $secretsFile = "A:\AI\daemon\config\secrets.local.toml"
 $inSection = $false
 foreach ($line in (Get-Content -LiteralPath $secretsFile -Encoding UTF8)) {
@@ -60,7 +63,29 @@ foreach ($line in (Get-Content -LiteralPath $secretsFile -Encoding UTF8)) {
     break
   }
 }
+
+# NVIDIA NIM and Groq live in A:\OpenDeamon\secrets\gateway.env (KEY=value).
+# Needed by the delegation scheme (TODO phase 2-ter layer 0 item 9): children
+# run on NIM, the reviewer on Groq through provider `custom` - Hermes has no
+# `groq` provider, so the key must be in the environment under that exact name.
+$gatewayEnv = "$Root\secrets\gateway.env"
+if (Test-Path -LiteralPath $gatewayEnv) {
+  foreach ($line in (Get-Content -LiteralPath $gatewayEnv -Encoding UTF8)) {
+    $t = $line.Trim()
+    if (-not $t -or $t.StartsWith("#") -or $t -notmatch '=') { continue }
+    $name, $value = $t -split '=', 2
+    $name = $name.Trim(); $value = $value.Trim().Trim('"').Trim("'")
+    # Only the two keys this project routes through; OPENAI_API_KEYS is dead
+    # (HTTP 401 "Incorrect API key", verified 2026-09-30) and is not loaded.
+    if ($name -in @("NVIDIA_API_KEY", "GROQ_API_KEY")) {
+      [Environment]::SetEnvironmentVariable($name, $value, "Process")
+    }
+  }
+}
+
 if (-not $env:OPENROUTER_API_KEY) { throw "OPENROUTER_API_KEY not found in $secretsFile" }
+if (-not $env:NVIDIA_API_KEY) { throw "NVIDIA_API_KEY not found in $gatewayEnv" }
+if (-not $env:GROQ_API_KEY) { throw "GROQ_API_KEY not found in $gatewayEnv" }
 
 if ($HermesArgs -and $HermesArgs.Count -gt 0) {
   & "$HermesBin\hermes.exe" @HermesArgs
