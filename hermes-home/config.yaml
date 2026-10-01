@@ -75,14 +75,33 @@ auxiliary:
         # независимые провайдеры, но если упадут все, пусть лучше PARTIAL с
         # пометкой, чем «нет вердикта».
         model: inclusionai/ling-3.0-flash-sante:free
+  # Phase 6.4: local vision is wired. The plugin model-providers/ollama-cloud
+  # only reaches https://ollama.com/v1 and cannot be pointed at 127.0.0.1, so
+  # this goes through `custom`, which is already Ollama-aware (the ollama/vllm/
+  # llamacpp aliases, the 11434 port probe for think:false, ollama_num_ctx).
+  # /v1 is required - it is the OpenAI-compatible surface, not the native /api.
+  #
+  # Measured, not assumed. The first live attempt answered with EMPTY content
+  # at max_tokens=300 and `completion_tokens: 300` - the model spent the whole
+  # budget reasoning, which is the same trap the reviewer layer guards against,
+  # and the HTTP code was 200. Local models obey the same rule: max_tokens must
+  # clear the reasoning overhead.
+  #
+  # A second trap: the OpenAI-compatible shape is content as an array with an
+  # image_url data URI. Sending the native {"images": [base64]} silently drops
+  # the picture - prompt_tokens stayed at 41 and the model described a "red
+  # circle" for a blue rectangle. A non-empty answer is not proof it saw the
+  # image; functions/local-vision/ checks against a picture whose answer is
+  # known.
   vision:
-    provider: openrouter
-    model: dots-studio/dots-3-note-preview:free
+    provider: custom
+    model: "qwen3-vl:8b"
+    base_url: "http://127.0.0.1:11434/v1"
+    api_key: "no-key"
+    timeout: 120
     fallback_chain:
       - provider: openrouter
-        model: qwen/qwen3.8-27b:free
-      - provider: openrouter
-        model: google/gemma-4-31b-it:free
+        model: dots-studio/dots-3-note-preview:free
 skills:
   external_dirs:
     - A:/OpenDeamon/functions
