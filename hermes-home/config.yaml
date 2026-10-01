@@ -34,23 +34,37 @@ auxiliary:
     enabled: false
   background_review:
     enabled: false
-  # Layer 0, item 8. The plan names Groq via `provider: custom` as the
-  # reviewer, with NIM as fallback. Implemented on NIM instead, for two
-  # reasons measured live 2026-09-30:
-  #   1. Groq answers HTTP 403 "Forbidden" from this machine's exit while
-  #      OpenRouter and NIM both answer 200 from the same VPN session - so
-  #      VPN is up and the block is Groq-side (the gateway.env note records
-  #      the same: ASN Interhive 403, other exits 200).
-  #   2. Hermes has no `groq` provider at all; `custom` would need the key
-  #      written into this config, and config.yaml is git-tracked. A secret
-  #      in the repo is not an acceptable way to make a reviewer work.
-  # NIM keeps the independence SCHEME requires: core is OpenRouter, reviewer
-  # is NIM, so FULL (different provider AND different model), not SEVERE.
-  # Reported to the planner as INFRA_FAILURE on the Groq rail.
+  # Layer 0, item 8, revised after the planner rejected the NIM-only choice.
+  #
+  # The planner measured that Groq is reachable from this same egress
+  # (GET /v1/models 200 in 0.79 s, POST /v1/chat/completions 200 in 0.56 s) and
+  # that the earlier 403 was intermittent rather than ASN-bound. Their
+  # reviewer benchmarks also put Groq 4-10x faster than NIM on real diffs.
+  #
+  # I confirmed in the Hermes source that a `custom` fallback_chain element
+  # really does accept base_url and an API key: _try_configured_fallback_chain
+  # documents "each needs provider; model/base_url/api_key optional", and
+  # _resolve_fallback_entry passes explicit_base_url=entry["base_url"] plus
+  # explicit_api_key=resolve_entry_api_key(entry).
+  #
+  # One deliberate difference from the planner's snippet: the key is given as
+  # `key_env`, not `api_key: ${env:GROQ_API_KEY}`. resolve_entry_api_key accepts
+  # both, but key_env reads through agent.secret_scope.get_secret, which is
+  # profile-scoped and therefore correct under a multiplexed gateway, and the
+  # secret never lands in this git-tracked file even transiently.
+  #
+  # Independence: core is OpenRouter, the primary reviewer is NIM, and Groq is
+  # a third provider - so any single reviewer choice keeps FULL. The last entry
+  # is the core's own provider, which is PARTIAL; layer 6 is required to mark
+  # that rather than let it pass silently.
   review:
     provider: nvidia
     model: openai/gpt-oss-20b
     fallback_chain:
+      - provider: custom
+        base_url: https://api.groq.com/openai/v1
+        model: openai/gpt-oss-120b
+        key_env: GROQ_API_KEY
       - provider: openrouter
         model: inclusionai/ling-3.0-flash-sante:free
   vision:

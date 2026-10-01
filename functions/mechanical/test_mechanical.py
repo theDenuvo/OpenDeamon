@@ -264,6 +264,115 @@ def test_clean_run_uses_a_separate_dir_and_records_exit_and_log():
 
 
 @test
+def test_a_criterion_with_a_failing_check_is_not_verified():
+    """ПРИЁМОЧНЫЙ ТЕСТ Р1 - тот самый обход, который нашёл планировщик.
+
+    Критерий «add складывает два числа» с проверкой, которая НАМЕРЕННО падает
+    на баге add(2,3)!=5, при этом все тесты проекта зелёные. До починки
+    `run_clean` вызывался без `spec`, ветка `method == "command"` была мёртвым
+    кодом, и результат был `verified` - то есть «доказан» критерий, который
+    никто не проверял. Ровно тот класс подмены, против которого построен
+    проект."""
+    fails = []
+    root, proj = make_repo()
+    try:
+        bar = barrier(proj, os.path.join(root, "hermes"))
+        wt = bar["worktree"]
+        shutil.copy(os.path.join(proj, "test_app.py"), os.path.join(wt, "test_app.py"))
+        # Настоящий баг в коде: add возвращает a+b-1. Проверка требует
+        # ПРАВИЛЬНОГО поведения, поэтому она обязана упасть. (Проверка с
+        # неверным ожиданием тут не годится - она прошла бы по случайности.)
+        app = os.path.join(wt, "app.py")
+        with open(app, encoding="utf-8") as f:
+            good = f.read()
+        with open(app, "w", encoding="utf-8") as f:
+            f.write(good.replace("return a + b", "return a + b - 1"))
+        checker = os.path.join(wt, "check_add.py")
+        with open(checker, "w", encoding="utf-8") as f:
+            f.write("import app\n"
+                    "assert app.add(2, 3) == 5, 'add(2,3) must be 5'\n")
+        spec = {"criteria": [{"id": "add", "text": "add складывает два числа",
+                             "method": "command",
+                             "check": "%s check_add.py" % sys.executable,
+                             "severity": "LOW"}]}
+        out = mech.run(bar["ledger_path"], wt, spec=spec, do_commit=False)
+        if out.get("status_after") == "verified":
+            fails.append("a criterion whose check FAILS was reported verified")
+        if out.get("passed"):
+            fails.append("the gate passed with a failing criterion check")
+        table = out.get("criteria_evidence") or []
+        if not table:
+            fails.append("no per-criterion evidence was recorded")
+        else:
+            row = table[0]
+            if row.get("id") != "add":
+                fails.append("evidence names %r" % row.get("id"))
+            if row.get("satisfied") is not False:
+                fails.append("evidence says satisfied=%r" % row.get("satisfied"))
+            if row.get("exit_code") == 0:
+                fails.append("the failing check reported exit 0")
+            if not row.get("log"):
+                fails.append("no log recorded for the criterion check")
+        if out.get("kind") != mech.MECHANICAL_FAILURE:
+            fails.append("kind %s, expected MECHANICAL_FAILURE" % out.get("kind"))
+        if out.get("action") != mech.REWORK_CODE:
+            fails.append("action %s, expected REWORK_CODE" % out.get("action"))
+        return fails
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@test
+def test_a_criterion_with_a_passing_check_is_proven():
+    """Обратная сторона: исполняемый и зелёный критерий обязан быть доказан,
+    иначе починка превратилась бы в «никогда не verified»."""
+    fails = []
+    root, proj = make_repo()
+    try:
+        bar = barrier(proj, os.path.join(root, "hermes"))
+        wt = bar["worktree"]
+        shutil.copy(os.path.join(proj, "test_app.py"), os.path.join(wt, "test_app.py"))
+        checker = os.path.join(wt, "check_ok.py")
+        with open(checker, "w", encoding="utf-8") as f:
+            f.write("import app\nassert app.add(2, 3) == 5\n"
+                    "assert app.add(1, 2) == 3\n")
+        spec = {"criteria": [{"id": "ok", "text": "add работает",
+                             "method": "command",
+                             "check": "%s check_ok.py" % sys.executable,
+                             "severity": "LOW"}]}
+        out = mech.run(bar["ledger_path"], wt, spec=spec, do_commit=False)
+        table = out.get("criteria_evidence") or []
+        if not table:
+            fails.append("no per-criterion evidence was recorded")
+        elif table[0].get("satisfied") is not True:
+            fails.append("a passing check was not recorded as satisfied: %s"
+                         % table[0])
+        return fails
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@test
+def test_manual_criterion_is_never_executed_as_evidence():
+    """У manual нет команды, поэтому он не может попасть в таблицу
+    доказательств - его судьба на потолке Слоя 1 (UNVERIFIABLE)."""
+    fails = []
+    root, proj = make_repo()
+    try:
+        bar = barrier(proj, os.path.join(root, "hermes"))
+        wt = bar["worktree"]
+        spec = {"criteria": [{"id": "m", "text": "выглядит правильно",
+                             "method": "manual", "check": "%s -c pass"
+                             % sys.executable, "severity": "LOW"}]}
+        table = mech.execute_criteria(spec, wt)
+        if any(r["id"] == "m" for r in table):
+            fails.append("a manual criterion was executed as proof: %s" % table)
+        return fails
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@test
 def test_red_test_is_mechanical_failure_not_infrastructure():
     fails = []
     clean = {"runs": [{"cmd": ["pytest"], "exit_code": 1, "timed_out": False,

@@ -292,7 +292,27 @@ def is_test_file(rel: str) -> bool:
 # --------------------------------------------------------------------------
 
 def home() -> str:
-    return os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
+    """Каталог Hermes. Фолбэка на `~` здесь быть НЕ должно.
+
+    Правило владельца: диск C: не трогать, вся работа на A: и Z:. Старый
+    фолбэк `os.path.expanduser("~/.hermes")` при запуске мимо bootstrap.ps1
+    увёл приватное хранилище в C:/Users/cheli/.hermes/state/baseline - это
+    наблюдалось в прогоне планировщика.
+
+    Фолбэк теперь выводится из СОБСТВЕННОГО пути модуля: functions/baseline/
+    лежит внутри проекта, значит hermes-home тоже на A:. Это детерминировано
+    и не зависит от того, откуда запущен процесс, поэтому cron, Desktop и CI
+    получают то же самое хранилище."""
+    env = os.environ.get("HERMES_HOME")
+    if env:
+        return env
+    root = repo_root_from(os.path.dirname(os.path.abspath(__file__)))
+    if root:
+        return os.path.join(root, "hermes-home")
+    # Вне git-репозитория остаётся каталог рядом с самим модулем, а не домашний
+    # каталог пользователя: C: под запретом.
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "_hermes_home")
 
 
 def repo_root_from(start: str) -> str:

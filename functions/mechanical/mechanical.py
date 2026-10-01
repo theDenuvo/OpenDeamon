@@ -82,6 +82,10 @@ ACTION = {
 NO_RERUN = frozenset({TEST_TAMPERING, WORKER_CRASH})
 
 RUN_TIMEOUT = 600
+# Методы, критерий по которым можно проверить исполнением команды. `manual`
+# сюда не входит принципиально: у него нет команды, и он остаётся на
+# потолке Слоя 1 (UNVERIFIABLE), а не превращается в доказательство.
+AUTO_METHODS = frozenset({"command", "test", "invariant", "snapshot"})
 COPY_SKIP = frozenset({".git", ".mechanical", "__pycache__", ".worktrees",
                        "node_modules", ".pytest_cache"})
 INFRA_MARKERS = (
@@ -185,46 +189,96 @@ def _commands(spec: dict | None, sandbox: str) -> list[list[str]]:
     return cmds
 
 
-def run_clean(worktree: str, spec: dict | None = None,
-              timeout: int = RUN_TIMEOUT) -> dict:
-    """Прогнать проверки в ОТДЕЛЬНОМ каталоге, записать код возврата и лог.
+def _exec(cmd: list[str], sandbox: str, timeout: int,
+          log_name: str) -> dict:
+    """Одна команда: код возврата, лог, хвост вывода."""
+    started = time.time()
+    try:
+        proc = subprocess.run(cmd, cwd=sandbox, capture_output=True,
+                              text=True, timeout=timeout)
+        code, out = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+        timed_out = False
+    except subprocess.TimeoutExpired as exc:
+        code = 124
+        out = exc.stdout if isinstance(exc.stdout, str) else ""
+        out += "\nTIMEOUT after %ds: %s" % (timeout, " ".join(cmd))
+        timed_out = True
+    except OSError as exc:
+        code, out, timed_out = 127, "cannot execute %s: %s" % (cmd[0], exc), False
+    try:
+        with open(os.path.join(sandbox, log_name), "w", encoding="utf-8") as fh:
+            fh.write("$ %s\n\n%s" % (" ".join(cmd), out))
+    except OSError:
+        pass
+    return {"cmd": cmd, "exit_code": code, "log": log_name,
+            "seconds": round(time.time() - started, 2),
+            "timed_out": timed_out, "output_tail": out[-4000:]}
 
-    «Чистый прогон» не может означать прогон в грязном рабочем дереве: там
-    результат смешан с тем, что воркер не успел доделать или уже откатил."""
 
+def _sandbox(worktree: str) -> str:
+    """Изолированная копия дерева для прогонов.
+
+    Без копии «чистый прогон» был бы прогоном в пустом каталоге: там
+    `unittest discover` находит ноль тестов и выходит с кодом 5, то есть
+    зелёного результата не существует вовсе. Копия также снимает влияние
+    грязого рабочего дерева на результат."""
     sandbox = os.path.join(worktree, ".mechanical", "cleanrun")
     shutil.rmtree(sandbox, ignore_errors=True)
     os.makedirs(sandbox, exist_ok=True)
-    # Копия дерева в изолированную папку. Без копии «чистый прогон» был бы
-    # прогоном в пустом каталоге: unittest discover там находит ноль тестов и
-    # выходит с кодом 5, то есть зелёного результата не существует вовсе.
-    # Изолированная копия также снимает влияние грязного рабочего дерева на
-    # результат - именно это требование к «чистому прогону».
     _copy_tree(worktree, sandbox)
+    return sandbox
+
+
+def execute_criteria(spec: dict | None, worktree: str,
+                     timeout: int = RUN_TIMEOUT) -> list[dict]:
+    """ВЫПОЛНИТЬ проверку каждого автоматического критерия и записать доказательство.
+
+    Это тот пункт, который обязан выполняться по факту, а не по заявлению.
+    Раньше `run_clean` вызывался без `spec`, ветка `method == "command"` была
+    мёртвым кодом, и `verified` означало «нашёлся какой-то зелёный тестовый
+    файл». Античит при этом был исправен (тесты защищены от изменения), но
+    критерии никто не проверял - то есть ровно тот класс подмены, против
+    которого построен проект.
+
+    Возвращает по одному элементу на критерий: исполненная команда, код
+    возврата, лог и удовлетворён ли критерий. Критерий без `check` или с
+    неавтоматическим методом сюда не попадает - его судьбой занимается
+    потолок Слоя 1."""
+    sandbox = _sandbox(worktree)
+    table: list[dict] = []
+    for crit in ((spec or {}).get("criteria") or []):
+        method = (crit.get("method") or "").strip()
+        check = (crit.get("check") or "").strip()
+        if method not in AUTO_METHODS or not check:
+            continue
+        run = _exec(check.split(), sandbox, timeout,
+                    "crit-%s.log" % (crit.get("id") or len(table)))
+        table.append({
+            "id": crit.get("id", ""),
+            "text": crit.get("text", ""),
+            "method": method,
+            "check": check,
+            "exit_code": run["exit_code"],
+            "log": run["log"],
+            "output_tail": run["output_tail"][-1500:],
+            "satisfied": run["exit_code"] == 0,
+        })
+    return table
+
+
+def run_clean(worktree: str, spec: dict | None = None,
+              timeout: int = RUN_TIMEOUT) -> dict:
+    """Общий прогон наборов в ОТДЕЛЬНОМ каталоге, с кодом возврата и логом.
+
+    Это регрессионная страховка, а не доказательство критериев: доказательства
+    собирает `execute_criteria`. «Чистый прогон» не может означать прогон в
+    грязном рабочем дереве - там результат смешан с тем, что воркер не успел
+    доделать или уже откатил."""
+
+    sandbox = _sandbox(worktree)
     results = []
     for cmd in _commands(spec, sandbox):
-        started = time.time()
-        try:
-            proc = subprocess.run(cmd, cwd=sandbox, capture_output=True,
-                                  text=True, timeout=timeout)
-            code, out = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
-            timed_out = False
-        except subprocess.TimeoutExpired as exc:
-            code = 124
-            out = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-            out += "\nTIMEOUT after %ds: %s" % (timeout, " ".join(cmd))
-            timed_out = True
-        log_name = "run-%d.log" % len(results)
-        try:
-            with open(os.path.join(sandbox, log_name), "w",
-                      encoding="utf-8") as fh:
-                fh.write("$ %s\n\n%s" % (" ".join(cmd), out))
-        except OSError:
-            pass
-        results.append({"cmd": cmd, "exit_code": code, "log": log_name,
-                        "seconds": round(time.time() - started, 2),
-                        "timed_out": timed_out,
-                        "output_tail": out[-4000:]})
+        results.append(_exec(cmd, sandbox, timeout, "run-%d.log" % len(results)))
     return {
         "sandbox": sandbox,
         "separate_dir": True,
@@ -353,7 +407,22 @@ def run(ledger_path: str, worktree: str, spec: dict | None = None,
                                                    tamper["deleted"])]})
         return result
 
-    clean = run_clean(worktree)
+    # Доказательства по критериям - ДО общего прогона. Именно они решают,
+    # verified, а не «нашёлся зелёный тестовый файл».
+    evidence = execute_criteria(spec, worktree)
+    result["criteria_evidence"] = evidence
+    unsatisfied = [e for e in evidence if not e["satisfied"]]
+    if unsatisfied:
+        names = ", ".join("%s(exit=%s)" % (e["id"], e["exit_code"])
+                          for e in unsatisfied)
+        result.update({"passed": False, "kind": MECHANICAL_FAILURE,
+                       "action": REWORK_CODE, "rerun_allowed": True,
+                       "status_after": "judged",
+                       "reasons": ["criterion check FAILED, the criterion is "
+                                   "not proven: %s" % names]})
+        return result
+
+    clean = run_clean(worktree, spec=spec)
     result["clean_run"] = clean
     if not clean["all_passed"]:
         verdict = classify_run(clean)
@@ -392,7 +461,8 @@ def run(ledger_path: str, worktree: str, spec: dict | None = None,
         "action": "",
         "rerun_allowed": True,
         "unverifiable": unverifiable,
-        # verified только если механика прошла И не осталось UNVERIFIABLE.
+        # verified только если ВСЕ автоматические критерии исполнены и
+        # удовлетворены (иначе мы вернулись выше) И не осталось UNVERIFIABLE.
         "status_after": "verified" if unverifiable == 0 else "judged",
         "reasons": ([] if unverifiable == 0
                     else ["%d criterion(s) stay UNVERIFIABLE; a manual "
