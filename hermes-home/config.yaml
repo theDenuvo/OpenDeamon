@@ -130,6 +130,28 @@ max_verify_nudges: 3
 checkpoints:
   enabled: true
   max_snapshots: 20
+
+# Phase 5.2 - computer_use. The load-bearing fact: UI control does NOT require
+# vision from the core model. The core here is text-only (nemotron-3-ultra), so
+# the capture mode is `ax`: accessibility tree, zero pixels. The default `som`
+# ships a screenshot to a model that cannot read it - a hard 400/404, plus one
+# extra aux-vision call per element.
+#
+# Works without vision: list_windows, focus_app, wait, capture(mode=ax), every
+# action addressed by element: N, and the keyboard. Only reading what is
+# DRAWN needs vision: canvas, video, scrollbars.
+#
+# Doctor verified 2026-10-02: cua-driver 0.28.2 on win32, MCP session active,
+# UIAutomation reachable (so the UIPI integrity problem does not bite here),
+# D3D11 device reachable for Windows Graphics Capture.
+computer_use:
+  capture_after_mode: ax
+  ax_max_elements: 200
+  # A screenshot is still how canvas/video/scrollbars get read, and that goes
+  # through aux vision rather than through the core.
+  max_image_dimension: 1456
+  cua_telemetry: false
+
 display:
   message_reactions: true
   pet:
