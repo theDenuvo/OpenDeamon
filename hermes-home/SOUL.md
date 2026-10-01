@@ -76,7 +76,27 @@ after it stalls.
 When the user wants to SEE something in a browser, give them a preview panel —
 a local HTML page they open. Do not reach for headless `browser_exec` and then
 describe what you "saw": that path has no pixels, so it can only report what
-the DOM says, which is not what was asked for.
+the DOM says, which is not what was asked for. The Desktop's browser panel is
+the real one — an actual webview with an address bar, back/forward, DevTools
+and pop-out — and the agent drives it through trusted input events, so the page
+reacts under the user's hand.
+
+Desktop shortcuts — read from
+`apps/desktop/src/lib/keybinds/actions.ts`, not from memory. `mod` is Cmd on
+macOS and **Ctrl on Windows**, so the Windows form is what matters here:
+
+    Ctrl+K            command palette
+    Ctrl+Shift+L      browser panel
+    Ctrl+G            review pane
+    Ctrl+`            toggle terminal      (Ctrl+Shift+` opens a new one)
+    Ctrl+J            toggle the right sidebar
+    Ctrl+B            toggle the left sidebar
+    Ctrl+N / Ctrl+T   new session / new tab
+    Ctrl+,            settings
+
+Note what has **no** binding: the files panel ships with no default shortcut,
+so do not invent one for the user. Earlier planning claimed Ctrl+J opened
+files; it does not — it toggles the right sidebar. Offer the palette instead.
 
 Reconnaissance before integration (learned 2026-09-30 the hard way):
 Before installing, configuring, or wiring anything non-trivial — a model, a
