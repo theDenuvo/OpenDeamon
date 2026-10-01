@@ -51,6 +51,20 @@ subagents for ALL coding; verified live, top-down, first working wins)
    the worker shipped `',234.50'` and rewrote the assertion to match its
    own bug; the test went green on a wrong implementation. Green tests
    prove the worker's self-consistency, never the spec.
+5. **New tests go in a NEW file. Never extend an existing baseline test.**
+   This is not a style preference, it is a hard rule with a mechanical
+   consequence, and a worker who does not know it will burn a whole cycle.
+   The barrier hashes every test file that existed before the worker ran.
+   Editing or deleting one of those files is `TEST_TAMPERING` -> FAIL ->
+   ESCALATE, and tampering is never reworked: nobody gets another attempt.
+   So: to add coverage, create `test_<feature>.py` (or similar) and leave the
+   existing files byte-identical. If a task genuinely requires changing an
+   existing test, say so in the prompt instead of doing it silently — that
+   way the baseline can be re-taken deliberately rather than the worker
+   tripping the alarm.
+   Observed 2026-10-02: the planner's scenario was a worker APPENDING
+   assertions to an existing `test_quota.py`. The system was right to flag
+   it, and the worker had no idea why it was failing.
 
 - Models under `opencode/` need no API key (`opencode models` lists them;
   ids rotate — promo lineup, check live on failure).
