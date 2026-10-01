@@ -66,6 +66,14 @@ auxiliary:
         model: openai/gpt-oss-120b
         key_env: GROQ_API_KEY
       - provider: openrouter
+        # PARTIAL, и теперь это помечается автоматически: элемент ведёт на
+        # провайдера ЯДРА, поэтому подстановка в рантайме тихо ослабляет
+        # независимость. Проверка:
+        #   python functions/verdict/verdict.py routes \
+        #     --config hermes-home/config.yaml --core-provider openrouter
+        # Оставлен как последний резерв: два других рельса (NIM, Groq) -
+        # независимые провайдеры, но если упадут все, пусть лучше PARTIAL с
+        # пометкой, чем «нет вердикта».
         model: inclusionai/ling-3.0-flash-sante:free
   vision:
     provider: openrouter
