@@ -273,20 +273,67 @@ def test_worker_cannot_read_the_ledger():
 
 def test_ledger_inside_the_worker_root_is_refused():
     """Обход защиты: если подсунуть путь LEDGER внутрь worktree, барьер
-    обязан отказаться, а не записать и пожать плечами."""
+    обязан отказаться, а не записать и пожать плечами.
+
+    Раньше проверка подставляла HERMES_HOME внутрь проекта. Так тест
+    больше не проверяет отказ - private_root() сам уводит хранилище за
+    пределы репозитория, и опасная конфигурация просто не возникает.
+    Теперь отказ проверяется там, где он возможен: через явный override
+    HERMES_BASELINE_PRIVATE_DIR, который честно указывает внутрь root.
+    """
     fails = []
     root = make_repo()
+    old = os.environ.get("HERMES_BASELINE_PRIVATE_DIR")
     try:
         with Env():
-            # Ставим state dir внутрь проекта — LEDGER окажется достижим.
-            os.environ["HERMES_HOME"] = os.path.join(root, "hermes")
+            # Ставим приватное хранилище внутрь проекта — LEDGER окажется
+            # достижим из worktree, который сам лежит внутри root.
+            os.environ["HERMES_BASELINE_PRIVATE_DIR"] = os.path.join(
+                root, "private")
             result = bl.create_barrier(root, spec_id="reachable")
             if result.get("worker_may_start"):
                 fails.append("a reachable ledger was accepted")
             if result.get("status") != bl.BARRIER_LEDGER_REACHABLE:
                 fails.append("status %s" % result.get("status"))
     finally:
+        if old is None:
+            os.environ.pop("HERMES_BASELINE_PRIVATE_DIR", None)
+        else:
+            os.environ["HERMES_BASELINE_PRIVATE_DIR"] = old
         shutil.rmtree(root, ignore_errors=True)
+    return fails
+
+
+def test_private_store_is_outside_the_repo():
+    """Ключевой инвариант этого слоя: приватное хранилище - ЗА пределами
+    репозитория, иначе воркер дойдёт до LEDGER парой уровней вверх.
+
+    Проверяется на НАСТОЯЩЕМ HERMES_HOME, а не на временном: временный
+    каталог тестов не лежит в git-репозитории, и repo_root_from() для
+    него честно вернёт пусто - такой тест ничего бы не утверждал.
+    """
+    fails = []
+    old_home = os.environ.get("HERMES_HOME")
+    old_dir = os.environ.get("HERMES_BASELINE_PRIVATE_DIR")
+    os.environ.pop("HERMES_BASELINE_PRIVATE_DIR", None)
+    try:
+        if not old_home:
+            return ["HERMES_HOME is not set - cannot test real placement"]
+        root = bl.repo_root_from(old_home)
+        if not root:
+            return ["real HERMES_HOME is not inside a git repo"]
+        priv = bl.private_root()
+        if bl.is_within(priv, root):
+            fails.append("private_root %s is inside the repo %s" % (priv, root))
+        # Worktree лежит внутри репозитория, поэтому относительный путь
+        # от него обязан уходить вверх, а не вести внутрь.
+        wt = os.path.join(root, ".worktrees", "probe")
+        rel = os.path.relpath(priv, wt)
+        if not rel.startswith(".."):
+            fails.append("private_root is reachable from a worktree: %s" % rel)
+    finally:
+        if old_dir is not None:
+            os.environ["HERMES_BASELINE_PRIVATE_DIR"] = old_dir
     return fails
 
 
@@ -1114,6 +1161,7 @@ TESTS = [
     ("conftest.py counts as a baseline test", test_conftest_is_a_baseline_test),
     ("worker cannot reach the LEDGER", test_worker_cannot_read_the_ledger),
     ("a reachable ledger path is refused", test_ledger_inside_the_worker_root_is_refused),
+    ("private store is outside the repo", test_private_store_is_outside_the_repo),
     ("modified baseline test -> tampering", test_modified_baseline_test_is_tampering),
     ("deleted baseline test -> tampering", test_deleted_baseline_test_is_tampering),
     ("new test file is allowed (TDD not broken)", test_new_test_file_is_allowed),

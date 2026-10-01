@@ -295,8 +295,45 @@ def home() -> str:
     return os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
 
 
+def repo_root_from(start: str) -> str:
+    """Ближайший каталог с .git, вверх по дереву от start."""
+    cur = os.path.abspath(start)
+    while True:
+        if os.path.exists(os.path.join(cur, ".git")):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return ""
+        cur = parent
+
+
+def private_root() -> str:
+    """Каталог приватного хранилища - ЗА пределами репозитория.
+
+    Почему не внутри. Воркер запускается в worktree, а worktree лежит
+    внутри репозитория (.worktrees/<id>), поэтому любой каталог внутри
+    репозитория достижим из него - либо напрямую, либо парой уровней
+    вверх. Проверено на живой машине: hermes-home под git (351 файл), и
+    её runtime-каталог state/ поэтому оказывается в зоне досягаемости
+    воркера.
+
+    'Вне репозитория' - единственная позиция, которая даёт настоящую
+    недостижимость. Переопределяется переменной
+    HERMES_BASELINE_PRIVATE_DIR, что нужно тестам.
+    """
+    override = os.environ.get("HERMES_BASELINE_PRIVATE_DIR")
+    if override:
+        return os.path.abspath(override)
+    root = repo_root_from(home())
+    if not root:
+        # Не git-репозиторий - тогда домашний каталог и есть граница.
+        return os.path.join(os.path.abspath(home()), "state")
+    # Соседняя папка: "A:\\OpenDeamon" -> "A:\\OpenDeamon.private"
+    return os.path.abspath(root) + ".private"
+
+
 def ledger_dir() -> str:
-    return os.path.join(home(), "state", "baseline")
+    return os.path.join(private_root(), "baseline")
 
 
 def quarantine_dir() -> str:
@@ -927,7 +964,17 @@ def create_barrier(root: str, spec_id: str = "", isolation: bool = True,
 
     # 4. LEDGER в недостижимое для воркера место.
     path = os.path.join(ledger_dir(), "%s.ledger.json" % base["baseline_id"])
-    reachable = [where for where in (root, result["worktree"])
+    # Воркер не в песочнице: он читает всё, что доступно процессу. Поэтому
+    # недостижимость должна быть настоящей, а не «по дереву воркера».
+    #
+    # Сверять надо и против root, и против worktree. Worktree лежит ВНУТРИ
+    # репозитория (.worktrees/<id>), поэтому воркер доходит до ledger
+    # через два уровня вверх. Проверка только против worktree была бы
+    # наивной: барьер позеленел бы при реально доступном ledger.
+    #
+    # Соответственно ledger обязан лежать за пределом репозитория - это
+    # и делает ledger_dir() (см. private_root()).
+    reachable = [where for where in (root, result.get("worktree"))
                  if where and is_within(path, where)]
     if reachable:
         result["status"] = BARRIER_LEDGER_REACHABLE
