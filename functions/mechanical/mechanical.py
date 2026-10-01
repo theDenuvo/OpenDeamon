@@ -87,8 +87,25 @@ RUN_TIMEOUT = 600
 # сюда не входит принципиально: у него нет команды, и он остаётся на
 # потолке Слоя 1 (UNVERIFIABLE), а не превращается в доказательство.
 AUTO_METHODS = frozenset({"command", "test", "invariant", "snapshot"})
+# Каталоги, которые не копируются в песочницу чистого прогона.
+#
+# Это не косметика. На реальном проекте песочница разрослась до 19.6 ГБ и
+# выбила диск: копировался весь проект целиком, вместе с кэшем на 38 ГБ.
+# Исключение списка кэшей превращало прогон в «прочитано 0 файлов, тестов
+# нет» тихо, а полное копирование - в WinError 112 на заполненном диске.
+# Оба варианта плохи, поэтому тяжёлое исключается явно.
+HEAVY_SKIP = frozenset({
+    ".git", ".mechanical", "__pycache__", ".worktrees", "node_modules",
+    ".pytest_cache", ".mypy_cache", ".ruff_cache", "cache", "caches",
+    "models", "venvs", "venv", ".venv", "env", "owui", "desktop",
+    "gateway", "tools", "searxng", "data", "logs", "logs_tmp", "tmp",
+})
 COPY_SKIP = frozenset({".git", ".mechanical", "__pycache__", ".worktrees",
                        "node_modules", ".pytest_cache"})
+# Потолок копирования. Превышение - это ошибка с внятным сообщением, а не
+# молчаливое урезание: иначе результат прогона снова перестал бы что-то
+# проверять.
+COPY_BUDGET_BYTES = 512 * 1024 * 1024
 INFRA_MARKERS = (
     "timeout", "timed out", "no such file or directory", "not recognized",
     "is not installed", "command not found", "connection refused",
@@ -99,18 +116,49 @@ INFRA_MARKERS = (
 INFRA_EXIT = frozenset({124, 126, 127})
 
 
-def _copy_tree(src: str, dst: str) -> None:
-    """Изолированная копия дерева для чистого прогона."""
+def _copy_tree(src: str, dst: str) -> dict:
+    """Изолированная копия дерева для чистого прогона.
+
+    Тяжёлые каталоги (кэши, веса моделей, виртуальные окружения) исключены
+    явно: на этом проекте полная копия занимала 19.6 ГБ и выбивала диск.
+    Превышение бюджета копирования - явная ошибка, а не тихое урезание."""
+    copied, skipped, total = 0, 0, 0
+    over_budget = False
     for dirpath, dirnames, filenames in os.walk(src):
-        dirnames[:] = [d for d in dirnames if d not in COPY_SKIP]
+        dirnames[:] = [d for d in dirnames
+                       if d not in COPY_SKIP and d not in HEAVY_SKIP]
         rel = os.path.relpath(dirpath, src)
         target_dir = dst if rel == "." else os.path.join(dst, rel)
         os.makedirs(target_dir, exist_ok=True)
         for name in filenames:
             if name.endswith((".pyc", ".pyo")):
                 continue
-            shutil.copy2(os.path.join(dirpath, name),
-                         os.path.join(target_dir, name))
+            source = os.path.join(dirpath, name)
+            try:
+                size = os.path.getsize(source)
+            except OSError:
+                continue
+            if total + size > COPY_BUDGET_BYTES:
+                over_budget = True
+                skipped += 1
+                continue
+            try:
+                shutil.copy2(source, os.path.join(target_dir, name))
+            except OSError:
+                skipped += 1
+                continue
+            copied += 1
+            total += size
+    info = {"copied": copied, "skipped": skipped,
+            "bytes": total, "over_budget": over_budget,
+            "excluded": sorted(HEAVY_SKIP)}
+    if over_budget:
+        info["warning"] = (
+            "copy budget of %d MB exceeded; %d file(s) were NOT copied. The "
+            "run is still honest only if those files are irrelevant to the "
+            "criteria - otherwise the run must be declared INCOMPLETE, not "
+            "green" % (COPY_BUDGET_BYTES // (1024 * 1024), skipped))
+    return info
 
 
 def action_for(kind: str) -> str:
@@ -216,18 +264,18 @@ def _exec(cmd: list[str], sandbox: str, timeout: int,
             "timed_out": timed_out, "output_tail": out[-4000:]}
 
 
-def _sandbox(worktree: str) -> str:
+def _sandbox(worktree: str) -> tuple[str, dict]:
     """Изолированная копия дерева для прогонов.
 
     Без копии «чистый прогон» был бы прогоном в пустом каталоге: там
     `unittest discover` находит ноль тестов и выходит с кодом 5, то есть
     зелёного результата не существует вовсе. Копия также снимает влияние
-    грязого рабочего дерева на результат."""
+    грязого рабочего дерева на результат. Возвращает путь и отчёт о копии."""
     sandbox = os.path.join(worktree, ".mechanical", "cleanrun")
     shutil.rmtree(sandbox, ignore_errors=True)
     os.makedirs(sandbox, exist_ok=True)
-    _copy_tree(worktree, sandbox)
-    return sandbox
+    copy_info = _copy_tree(worktree, sandbox)
+    return sandbox, copy_info
 
 
 def split_check(check: str) -> list[str]:
@@ -273,7 +321,7 @@ def execute_criteria(spec: dict | None, worktree: str,
     возврата, лог и удовлетворён ли критерий. Критерий без `check` или с
     неавтоматическим методом сюда не попадает - его судьбой занимается
     потолок Слоя 1."""
-    sandbox = _sandbox(worktree)
+    sandbox, _copy = _sandbox(worktree)
     table: list[dict] = []
     for crit in ((spec or {}).get("criteria") or []):
         method = (crit.get("method") or "").strip()
@@ -304,13 +352,14 @@ def run_clean(worktree: str, spec: dict | None = None,
     грязном рабочем дереве - там результат смешан с тем, что воркер не успел
     доделать или уже откатил."""
 
-    sandbox = _sandbox(worktree)
+    sandbox, copy_info = _sandbox(worktree)
     results = []
     for cmd in _commands(spec, sandbox):
         results.append(_exec(cmd, sandbox, timeout, "run-%d.log" % len(results)))
     return {
         "sandbox": sandbox,
         "separate_dir": True,
+        "copy": copy_info,
         "runs": results,
         "all_passed": all(r["exit_code"] == 0 for r in results),
     }

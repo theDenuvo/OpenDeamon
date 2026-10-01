@@ -45,6 +45,8 @@ hermes-home/cache/
 hermes-home/checkpoints/
 # git worktrees the barrier creates for isolation
 .worktrees/
+# isolated copy of the tree used by the mechanical layer's clean run
+.mechanical/
 hermes-home/audio_cache/
 hermes-home/image_cache/
 hermes-home/attachments/

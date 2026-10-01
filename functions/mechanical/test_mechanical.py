@@ -373,6 +373,60 @@ def test_manual_criterion_is_never_executed_as_evidence():
 
 
 @test
+def test_clean_run_copy_does_not_swallow_the_project():
+    """Найдено на живом прогоне: песочница чистого прогона разрослась до
+    19.6 ГБ и выбила диск (WinError 112), потому что копировался весь проект
+    вместе с кэшем на 38 ГБ. Исключение тяжёлых каталогов обязано быть
+    явным, а превышение бюджета - ошибкой, а не тихим урезанием."""
+    fails = []
+    for heavy in ("cache", "models", "venvs", "node_modules", ".venv"):
+        if heavy not in mech.HEAVY_SKIP:
+            fails.append("%r is not excluded from the clean-run copy" % heavy)
+    root, proj = make_repo()
+    try:
+        big = os.path.join(root, "cache")
+        os.makedirs(big, exist_ok=True)
+        with open(os.path.join(big, "blob.bin"), "wb") as f:
+            f.write(b"x" * 4096)
+        info = mech._copy_tree(root, os.path.join(root, "_sandbox"))
+        if os.path.exists(os.path.join(root, "_sandbox", "cache")):
+            fails.append("the heavy dir was copied anyway")
+        if info.get("copied", 0) <= 0:
+            fails.append("nothing was copied at all: %s" % info)
+        if "warning" in info and not info.get("over_budget"):
+            fails.append("a warning was emitted without exceeding the budget")
+        return fails
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@test
+def test_copy_budget_overrun_is_reported():
+    """Превышение бюджета - это внятная ошибка. Молчаливый пропуск файлов
+    означал бы, что прогон перестал что-то проверять, но выглядел зелёным."""
+    fails = []
+    root, proj = make_repo()
+    old = mech.COPY_BUDGET_BYTES
+    try:
+        mech.COPY_BUDGET_BYTES = 1024          # deliberately tiny
+        with open(os.path.join(root, "big1.py"), "w", encoding="utf-8") as f:
+            f.write("x" + "y" * 4000)
+        with open(os.path.join(root, "big2.py"), "w", encoding="utf-8") as f:
+            f.write("x" + "y" * 4000)
+        info = mech._copy_tree(root, os.path.join(root, "_s2"))
+        if not info.get("over_budget"):
+            fails.append("the budget overrun was not flagged: %s" % info)
+        if not info.get("warning"):
+            fails.append("no warning text for the overrun")
+        if info.get("skipped", 0) <= 0:
+            fails.append("skipped count is zero despite an overrun")
+        return fails
+    finally:
+        mech.COPY_BUDGET_BYTES = old
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@test
 def test_red_test_is_mechanical_failure_not_infrastructure():
     fails = []
     clean = {"runs": [{"cmd": ["pytest"], "exit_code": 1, "timed_out": False,
