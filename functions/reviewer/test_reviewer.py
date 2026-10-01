@@ -176,6 +176,57 @@ def test_transport_is_probed_end_to_end_with_a_fake_model():
 
 
 @test
+def test_the_diff_actually_reaches_the_prompt():
+    """Найдено на живом прогоне: рецензент отвечал уверенно, а в notes писал,
+    что diff content отсутствует. Причина: фильтр резал дифф по хункам, терял
+    заголовки файлов, и в промт уходили 34 токена вместо 15928.
+
+    Дифф - единственное, что рецензент вообще видит. Если он не дошёл, любой
+    вердикт бессмыслен, а ответ приходит как валидный JSON и выглядит как
+    рабочий. Поэтому проверка здесь прямая: сумма токенов диффа в промтах
+    должна покрывать исходный дифф, а не его следы."""
+    fails = []
+    root = make_repo()
+    try:
+        # Наполняем файлы так, чтобы дифф был заведомо больше таргета.
+        for name in ("parser.py", "transform.py"):
+            with open(os.path.join(root, name), "a", encoding="utf-8") as f:
+                f.write("\n" + "\n".join(
+                    "def extra_%d(v):\n    total = sum(range(v))\n"
+                    "    assert total >= 0\n    return total" % i
+                    for i in range(200)))
+        with open(os.path.join(root, "test_transform.py"), "a",
+                  encoding="utf-8") as f:
+            f.write("\n\n" + "\n".join(
+                "def test_extra_%d():\n    assert True" % i for i in range(200)))
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+        subprocess.run(["git", "commit", "-q", "-m", "big"], cwd=root,
+                       capture_output=True)
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
+                              capture_output=True, text=True).stdout.strip()
+        cap = rv.build_capsule(root, head, criteria="keep parity of the parser")
+        whole = rv.estimate_tokens(cap["diff"])
+        prompts = rv.fit_chunks(cap, 2000)
+        delivered = 0
+        for p in prompts:
+            body = p.split("Diff of the verified commit:")[-1]
+            if "diff omitted" in body:
+                fails.append("the diff was omitted entirely instead of split")
+                continue
+            delivered += rv.estimate_tokens(body)
+        # Дифф должен дойти практически целиком: сюда годятся и повторы
+        # заголовков, и общий контекст, но не 99% потери.
+        if whole and delivered < whole * 0.75:
+            fails.append("diff lost in the prompt: %d tokens in, %d delivered"
+                         % (whole, delivered))
+        if "extra_199" not in "\n".join(prompts):
+            fails.append("the tail of the diff is missing - it was cut blind")
+        return fails
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@test
 def test_undecodable_diff_is_not_silently_empty():
     """Найдено на живом коммите: `text=True` декодирует вывод git через
     кодовую страницу консоли (cp1251), и дифф падал UnicodeDecodeError.
@@ -229,17 +280,29 @@ def test_oversized_review_is_reported_as_incomplete_not_as_pass():
                              for i in range(400))}
     files = ["f%03d.py" % i for i in range(400)]
     cap["files"] = files
-    prompts = rv.fit_chunks(cap, 400)
-    if len(prompts) <= rv.MAX_CHUNKS:
-        return fails   # не воспроизвелось - не ломаем тест
-    res = rv.review(cap, routes=("nim",))
-    if res.get("complete") is not False:
-        fails.append("a %d-chunk review was not marked incomplete" % len(prompts))
-    if "review_incomplete" not in (res.get("error") or ""):
-        fails.append("no explicit incompleteness reason: %r" % res.get("error"))
-    if res.get("chunks_reviewed", 0) > rv.MAX_CHUNKS:
-        fails.append("more chunks were sent than the limit")
-    return fails
+    # Ключи-заглушки: review() честно отказывается без ключа, и тогда
+    # incompleteness не была бы проверена вовсе.
+    env_backup = {k: os.environ.get(k) for k in ("NVIDIA_API_KEY", "GROQ_API_KEY")}
+    os.environ["NVIDIA_API_KEY"] = "test-key-nim"
+    try:
+        prompts = rv.fit_chunks(cap, 400)
+        if len(prompts) <= rv.MAX_CHUNKS:
+            return fails   # не воспроизвелось - не ломаем тест
+        res = rv.review(cap, routes=("nim",))
+        if res.get("complete") is not False:
+            fails.append("a %d-chunk review was not marked incomplete"
+                         % len(prompts))
+        if "review_incomplete" not in (res.get("error") or ""):
+            fails.append("no explicit incompleteness reason: %r" % res.get("error"))
+        if res.get("chunks_reviewed", 0) > rv.MAX_CHUNKS:
+            fails.append("more chunks were sent than the limit")
+        return fails
+    finally:
+        for k, v in env_backup.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 @test

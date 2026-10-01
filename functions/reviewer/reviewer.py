@@ -331,6 +331,73 @@ def _shrink_to_fit(capsule: dict, target: int) -> dict:
     return part
 
 
+def _split_by_hunks(capsule: dict, target: int) -> list[dict]:
+    """Разрезать слишком большую ГРУППУ по хункам, сохраняя заголовок файла.
+
+    Связку parser -> AST -> transform -> test эта операция не рвёт: она
+    работает уже после того, как группировка по импортам сделана, и каждый
+    кусок начинается с `diff --git`, поэтому рецензент всегда знает, какой
+    файл читает. Просто отбросить diff нельзя - это единственное, что
+    рецензент вообще видит."""
+    blocks = _diff_blocks(capsule.get("diff") or "")
+    if not blocks:
+        return []
+    budget = max(200, target // 2)
+    out: list[dict] = []
+    for name, body in blocks:
+        header = ""
+        rest: list[str] = []
+        for i, line in enumerate(body.splitlines()):
+            if line.startswith("diff --git "):
+                header = line
+                rest = body.splitlines()[i + 1:]
+                break
+        # Хунки внутри файла.
+        hunks, cur = [], None
+        for line in rest:
+            if line.startswith("@@"):
+                cur = [line]
+                hunks.append(cur)
+            elif cur is not None:
+                cur.append(line)
+        if not hunks:
+            out.append(_slice(capsule, {name}, header + "\n" + body))
+            continue
+        # Один ханк может быть больше бюджета (200 функций в одном hunk -
+        # обычное дело). Границы хунков его не спасают, поэтому режем по
+        # строкам ВНУТРИ хунка. Заголовок файла повторяется в каждом куске,
+        # поэтому рецензент всегда знает, что читает.
+        current, tokens = [], 0
+        for hunk in hunks:
+            lines = hunk
+            while lines:
+                batch, size = [], 0
+                for line in lines:
+                    t = estimate_tokens(line) + 1
+                    if batch and size + t > budget:
+                        break
+                    batch.append(line)
+                    size += t
+                if current and tokens + size > budget:
+                    out.append(_slice(capsule, {name},
+                                      header + "\n" + "\n".join(current)))
+                    current, tokens = [], 0
+                current.extend(batch)
+                tokens += size
+                lines = lines[len(batch):]
+        if current:
+            out.append(_slice(capsule, {name}, header + "\n" + "\n".join(current)))
+    return [p for p in out if p.get("diff")]
+
+
+def _slice(capsule: dict, files: set, diff_text: str) -> dict:
+    part = dict(capsule)
+    part["files"] = sorted(files)
+    part["test_files"] = [f for f in sorted(files) if is_test_path(f)]
+    part["diff"] = diff_text
+    return part
+
+
 def fit_chunks(capsule: dict, target: int = CAPSULE_TARGET_TOKENS) -> list[str]:
     """Нарезать капсулу на куски не больше target токенов каждый.
 
@@ -359,11 +426,17 @@ def fit_chunks(capsule: dict, target: int = CAPSULE_TARGET_TOKENS) -> list[str]:
         if _fits(part, target):
             out.append(render_prompt(part))
             continue
-        # Группа всё ещё велика: делим её на под-группы по импортам.
+        # Группа всё ещё велика: сначала пробуем деление по импортам.
         sub = split_logically(part) if len(part.get("files") or []) > 1 else []
         sub = [s for s in sub if s.get("files") != part.get("files")]
         if sub:
             queue.extend(sub)
+            continue
+        # Одна связная группа целиком не влезает - режем по хункам внутри
+        # файлов, но заголовок файла повторяем в каждом куске.
+        hunks = _split_by_hunks(part, target)
+        if hunks and len(hunks) > 1:
+            queue.extend(hunks)
             continue
         out.append(_hard_cap(render_prompt(part), target))
     if not out:
@@ -396,20 +469,34 @@ def _last_lines(text: str, n: int) -> str:
 
 
 def _drop_boring_hunks(diff: str) -> str:
-    """Убрать хунки без утверждений и ошибок: импорт, комментарии, формат."""
-    kept, block = [], []
-    for line in (diff or "").splitlines():
-        if line.startswith("diff --git ") or line.startswith("@@"):
-            if block and any(is_error_bearing(x) or x.startswith(("+", "-"))
-                             and not x.startswith(("+++", "---"))
-                             and len(x.strip()) > 3 for x in block):
-                kept.extend(block)
-            block = [line]
-        elif block:
-            block.append(line)
-    if block and any(is_error_bearing(x) for x in block):
-        kept.extend(block)
-    return "\n".join(kept) if kept else (diff or "")
+    """Выбросить файлы, чей дифф не несёт ни утверждений, ни ошибок.
+
+    Резать нужно по ФАЙЛАМ, сохраняя блок целиком. Первая версия резала по
+    хункам (`@@` закрывал блок), и это молча портило дифф до неузнаваемости:
+    заголовки `diff --git` терялись, и в промт уходили 34 токена вместо
+    15928. Рецензент при этом отвечал уверенно - и писал в notes, что
+    «diff content отсутствует». Ровно тот класс тихой поломки, который слой
+    и должен ловить.
+    """
+    blocks = _diff_blocks(diff or "")
+    if not blocks:
+        return diff or ""
+    kept, dropped = [], 0
+    for name, body in blocks:
+        # Утверждение или ошибка в файле - блок неприкосновенен.
+        if is_error_bearing(body):
+            kept.append(body)
+            continue
+        added = [l for l in body.splitlines()
+                 if l.startswith("+") and not l.startswith("+++")]
+        if any(len(l.strip()) > 3 for l in added):
+            kept.append(body)
+        else:
+            dropped += 1
+    if dropped and kept:
+        return "\n\n".join(kept) + ("\n\n[%d file(s) dropped: changes without "
+                                   "assertions or errors]" % dropped)
+    return "\n\n".join(kept) if kept else (diff or "")
 
 
 def _hard_cap(prompt: str, target: int) -> str:
@@ -427,7 +514,12 @@ def _hard_cap(prompt: str, target: int) -> str:
               "specific hunk you need.]\n" % target)
     if not sep:
         return _bounded(prompt, target, "whole prompt")
-    return head + marker
+    budget = max(200, target - estimate_tokens(head) - 80)
+    body = prompt.split(sep, 1)[1].split("Author's claim")[0]
+    kept = _bounded(body, budget, "diff tail")
+    return head + sep + kept + ("\n[author claim moved to a later chunk]\n"
+                                "Author's claim (LEAST TRUSTWORTHY):\n"
+                                "(omitted here to fit the budget)\n")
 
 
 def render_prompt(capsule: dict) -> str:
@@ -649,12 +741,17 @@ def review(capsule: dict, routes: tuple = ("nim", "groq"),
            "capsule_tokens": estimate_tokens(prompts[0]) if prompts else 0}
     if not verdicts:
         out["error"] = results[0].get("error") if results else "no_attempt"
-    elif not complete:
-        out["error"] = ("review_incomplete: %d logical groups exceed the %d "
-                        "chunk limit; a verdict here covers %d of them and "
-                        "must not be read as approval of the whole commit"
-                        % (len(prompts), max_chunks, min(len(prompts),
-                                                         max_chunks)))
+    if not complete:
+        incomplete = ("review_incomplete: %d logical groups exceed the %d "
+                      "chunk limit; a verdict here covers %d of them and must "
+                      "not be read as approval of the whole commit"
+                      % (len(prompts), max_chunks,
+                         min(len(prompts), max_chunks)))
+        # Неполнота называется даже вместе с транспортной ошибкой: иначе
+        # «нет вердикта из-за 401» маскирует более важный факт, что обзор в
+        # принципе не покрывает коммит.
+        out["error"] = (out["error"] + " | " + incomplete) if out.get("error") \
+            else incomplete
         out["ok"] = False
     return out
 
