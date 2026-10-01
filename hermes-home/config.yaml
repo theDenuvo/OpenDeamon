@@ -213,7 +213,9 @@ web:
 hooks:
   pre_tool_call:
     - matcher: "terminal|write_file|patch|edit|code_execution|execute_code|delegate_task"
-      prompt: "delegate-first: code tools are blocked on purpose. Hand coding to the opencode CLI worker with one 'opencode run -m opencode/space-bunny-free ...' terminal call, then verify by running the tests."
+      prompt: "delegate-first: code tools are blocked on purpose. Hand coding to the
+        opencode CLI worker with one 'opencode run -m opencode/space-bunny-free ...'
+        terminal call, then verify by running the tests."
       command: "py -u A:/OpenDeamon/functions/delegate-first/pre_tool_budget.py"
       timeout: 10
     # NO matcher key on purpose. An absent matcher means "fire on every tool"
@@ -222,7 +224,40 @@ hooks:
     # ("nothing to repeat at position 0"), falls back to literal equality, and
     # then matches only a tool literally named "*" - i.e. this hook never ran.
     # Verified in hermes-home/logs/errors.log on 2026-09-30 15:03.
-    - prompt: "quota-watch: OpenRouter spend/daily-free limits are enforced by this hook. If it reports a QUOTA WARNING or STOP, switch to the opencode-free ladder or local functions."
+    - prompt: "quota-watch: OpenRouter spend/daily-free limits are enforced by this
+        hook. If it reports a QUOTA WARNING or STOP, switch to the opencode-free ladder
+        or local functions."
       command: "py -u A:/OpenDeamon/functions/quota-watch/quota_watch.py"
       timeout: 20
 hooks_auto_accept: true
+mcp_servers:
+  context7:
+    url: https://mcp.context7.com/mcp
+    enabled: true
+  deepwiki:
+    url: https://mcp.deepwiki.com/mcp
+    enabled: true
+  aws-knowledge:
+    url: https://knowledge-mcp.global.api.aws
+    enabled: true
+    tools:
+      exclude:
+        - aws___retrieve_skill
+  microsoft-learn:
+    url: https://learn.microsoft.com/api/mcp
+    enabled: true
+  twilio-docs:
+    url: https://mcp.twilio.com/docs
+    enabled: true
+  wolfram:
+    url: https://agenttools.wolfram.com/mcp
+    enabled: true
+  kiwi:
+    url: https://mcp.kiwi.com
+    enabled: true
+    tools:
+      include:
+        - search-flight
+  trivago:
+    url: https://mcp.trivago.com/mcp
+    enabled: true
