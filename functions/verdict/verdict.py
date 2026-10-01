@@ -79,6 +79,13 @@ def independence(core: dict, reviewer: dict) -> dict:
     `route` (каким именно элементом цепочки отвечен рецензент). Ничего не
     предполагается: если провайдер неизвестен, честный ответ UNKNOWN, а не
     FULL - оборотная сторона «удобного» допущения."""
+    # Словарь может оказаться None целиком, а не просто с мусором внутри.
+    # Раньше это роняло AttributeError вместо UNKNOWN: отсутствие данных -
+    # это UNKNOWN, а не исключение. Планировщик прав, закрываем.
+    if not isinstance(core, dict):
+        core = {}
+    if not isinstance(reviewer, dict):
+        reviewer = {}
     cp, cm = _norm(core.get("provider")), _norm(core.get("model"))
     rp, rm = _norm(reviewer.get("provider")), _norm(reviewer.get("model"))
 
@@ -342,7 +349,36 @@ def _load_review_cfg(path: str) -> dict | None:
         return {}
 
 
+def _load_json(path: str) -> dict | None:
+    """Прочитать JSON-слоёж. Файл читается как bytes и декодируется явно.
+
+    Windows PowerShell 5.1 перенаправляет `>` в UTF-16 LE, то есть файл
+    начинается с 0xFF. Наивное open(..., encoding='utf-8') падает с
+    UnicodeDecodeError прямо в трейсбек, и непонятно, что не так - слои или
+    файл. UTF-16 без BOM и с BOM тоже принимаются: на Windows это штатный
+    формат перенаправления, а не повод отказывать."""
+    try:
+        raw = open(path, "rb").read()
+    except OSError as exc:
+        print("cannot read %s: %s" % (path, exc), file=sys.stderr)
+        return None
+    for enc in ("utf-8-sig", "utf-16", "utf-8"):
+        try:
+            data = json.loads(raw.decode(enc))
+            return data if isinstance(data, dict) else {}
+        except (ValueError, UnicodeDecodeError):
+            continue
+    print("%s is not readable JSON (tried utf-8, utf-8-sig, utf-16)"
+          % path, file=sys.stderr)
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(description="layer 6 verdict and independence")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -390,10 +426,12 @@ def main(argv: list[str] | None = None) -> int:
             print("no chain entry lands on the core provider")
         return 1 if bad else 0
 
-    with open(args.mechanical, encoding="utf-8") as fh:
-        mech = json.load(fh)
-    with open(args.review, encoding="utf-8") as fh:
-        rev = json.load(fh)
+    mech = _load_json(args.mechanical)
+    if mech is None:
+        return 2
+    rev = _load_json(args.review)
+    if rev is None:
+        return 2
     reviewer_cfg = None
     if args.config:
         reviewer_cfg = _load_review_cfg(args.config)

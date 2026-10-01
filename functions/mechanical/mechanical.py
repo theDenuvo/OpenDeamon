@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -175,7 +176,7 @@ def _commands(spec: dict | None, sandbox: str) -> list[list[str]]:
         for crit in spec.get("criteria") or []:
             check = (crit.get("check") or "").strip()
             if crit.get("method") == "command" and check:
-                cmds.append(check.split())
+                cmds.append(split_check(check))
     if cmds:
         return cmds
     for dirpath, dirnames, filenames in os.walk(sandbox):
@@ -229,6 +230,34 @@ def _sandbox(worktree: str) -> str:
     return sandbox
 
 
+def split_check(check: str) -> list[str]:
+    """Разбить строку проверки на аргументы.
+
+    Простое `split()` по пробелу ломается на пути с пробелом: кавычки и сами
+    пробелы остаются частью токена, и команда падает с exit=2 - неотличимо от
+    того, что проверка критерия не прошла. Симптом тот же, а причина другая,
+    и это легко выдать за баг проверяемой логики. shlex с posix=False режет
+    по правилам командной строки и сохраняет кавычки в аргументах.
+    На путях без пробелов (A:\\, Z:\\) поведение не меняется.
+
+    `posix=False` сохраняет кавычки В ТОКЕНЕ: без их снятия получается
+    `"check ok.py"` целиком, и Python падает с Errno 22 - то есть ровно тот
+    неотличимый от «проверка не прошла» отказ."""
+    try:
+        parts = shlex.split(check, posix=False)
+    except ValueError:
+        # Несбалансированная кавычка - не молчаливый пустой вызов.
+        return [check]
+    return [_unquote(p) for p in parts]
+
+
+def _unquote(token: str) -> str:
+    """Снять обрамляющие парные кавычки."""
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
+        return token[1:-1]
+    return token
+
+
 def execute_criteria(spec: dict | None, worktree: str,
                      timeout: int = RUN_TIMEOUT) -> list[dict]:
     """ВЫПОЛНИТЬ проверку каждого автоматического критерия и записать доказательство.
@@ -251,7 +280,7 @@ def execute_criteria(spec: dict | None, worktree: str,
         check = (crit.get("check") or "").strip()
         if method not in AUTO_METHODS or not check:
             continue
-        run = _exec(check.split(), sandbox, timeout,
+        run = _exec(split_check(check), sandbox, timeout,
                     "crit-%s.log" % (crit.get("id") or len(table)))
         table.append({
             "id": crit.get("id", ""),
@@ -503,7 +532,22 @@ def explain(kind: str) -> str:
         kind, action_for(kind), rerun_allowed(kind))
 
 
+def _force_utf8() -> None:
+    """Перевести stdout/stderr в UTF-8.
+
+    Тот же класс, что в рецензенте: дифф или вывод теста с любым символом вне
+    cp1251 убивал процесс UnicodeEncodeError ПОСЛЕ того, как результат уже
+    посчитан. Машинный выход в such a case - пустой файл, а слой 6 читает
+    именно его."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8()
     ap = argparse.ArgumentParser(description="mechanical verification gate")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -512,6 +556,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("worktree")
     p_run.add_argument("--spec")
     p_run.add_argument("--no-commit", action="store_true")
+    p_run.add_argument("--json", action="store_true",
+                       help="emit the result as JSON on stdout")
 
     p_ex = sub.add_parser("explain")
     p_ex.add_argument("failure_kind")
@@ -527,11 +573,18 @@ def main(argv: list[str] | None = None) -> int:
             with open(args.spec, encoding="utf-8") as fh:
                 spec = json.load(fh)
         except (OSError, ValueError) as exc:
-            print("cannot read spec: %s" % exc)
+            print("cannot read spec: %s" % exc, file=sys.stderr)
             return 2
     result = run(args.ledger, args.worktree, spec=spec,
                  do_commit=not args.no_commit)
-    print(render(result))
+    # Без машинного выхода слой 6 не подключается: слой принимает JSON-файлы,
+    # а текстовый отчёт разобрать нельзя. Планировщик поймал это сквозным
+    # прогоном, а не тестами: фикстуры слоя 6 были написаны руками в том же
+    # формате, который реальные слои не производят.
+    if getattr(args, "json", False):
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(render(result))
     return 0 if result.get("passed") else 1
 
 

@@ -780,7 +780,23 @@ def render(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _force_utf8() -> None:
+    """Перевести stdout/stderr в UTF-8.
+
+    Без этого `--json` ПАДАЕТ на любом не-ASCII символе: консоль Windows в
+    cp1251, а дифф может содержать что угодно, включая U+2011. Вывод при
+    этом не частичный - процесс умирает с UnicodeEncodeError, и слой 6
+    получает пустой файл. Это нашлось на живом прогоне, а не в тестах:
+    фикстуры были ASCII."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8()
     ap = argparse.ArgumentParser(description="layer 5 reviewer")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -793,11 +809,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--hashes")
     p.add_argument("--claim")
     p.add_argument("--routes", default="nim,groq")
+    p.add_argument("--json", action="store_true",
+                   help="emit the result as JSON on stdout")
 
     p2 = sub.add_parser("fit")
     p2.add_argument("--root", default=".")
     p2.add_argument("--commit", required=True)
     p2.add_argument("--criteria", default="")
+    p2.add_argument("--json", action="store_true")
 
     args = ap.parse_args(argv)
     criteria = args.criteria or ""
@@ -812,14 +831,25 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "fit":
         prompts = fit_chunks(capsule)
-        print("chunks: %d" % len(prompts))
-        for i, pr in enumerate(prompts, 1):
-            print("  chunk %d: ~%d tokens" % (i, estimate_tokens(pr)))
+        payload = {"chunks": len(prompts),
+                   "chunk_tokens": [estimate_tokens(p) for p in prompts]}
+        if getattr(args, "json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print("chunks: %d" % len(prompts))
+            for i, pr in enumerate(prompts, 1):
+                print("  chunk %d: ~%d tokens" % (i, estimate_tokens(pr)))
         return 0
 
     result = review(capsule, routes=tuple(r.strip() for r in
                                           args.routes.split(",") if r.strip()))
-    print(render(result))
+    # Слой 6 читает JSON-файлы. Без этого флага рецензент отдаёт только
+    # текст, и слой 6 в цепочке не участвует - именно это нашёл планировщик
+    # сквозным прогоном.
+    if getattr(args, "json", False):
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(render(result))
     return 0 if result.get("ok") else 1
 
 
