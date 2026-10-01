@@ -341,14 +341,23 @@ def quarantine_dir() -> str:
 
 
 def store_dir(root: str) -> str:
-    """Теневой store под `$HERMES_HOME/checkpoints/<slug>`.
+    """Теневой store - ЗА пределами репозитория, рядом с приватным хранилищем.
+
+    Раньше store жил в `$HERMES_HOME/checkpoints/<slug>`, и это давало две
+    проблемы. Первая: hermes-home под git, поэтому store становился частью
+    рабочего дерева - 785 неотслеживаемых объектов, а после `git add -A`
+    ещё и четыре отслеживаемых файла попали в репозиторий. Теневой store
+    не имеет права быть содержимым проекта.
+
+    Вторая, важнее: store - ровно то, что воркер не должен видеть или
+    подменять. Пока он лежит внутри репозитория, он достижим из worktree.
 
     Слаг от абсолютного пути проекта: два проекта с одинаковым именем
-    не должны делить один store, а в дерево проекта ничего не пишется."""
+    не должны делить один store."""
     resolved = os.path.abspath(root).replace("\\", "/")
     slug = hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:12]
     name = re.sub(r"[^A-Za-z0-9._-]", "", Path(resolved).name) or "project"
-    return os.path.join(home(), "checkpoints", "%s-%s" % (name, slug))
+    return os.path.join(private_root(), "checkpoints", "%s-%s" % (name, slug))
 
 
 def worktree_dir(root: str, baseline_id: str) -> str:
