@@ -365,12 +365,31 @@ def run_clean(worktree: str, spec: dict | None = None,
     }
 
 
+def _looks_like_test_runner(cmd: list[str]) -> bool:
+    """Команда - тестовый раннер?
+
+    Это важно для различения MECHANICAL и INFRA. Тестовый раннер, который
+    отработал и вернул ненулевой код, - это механический фейл: код красный.
+    Наивная эвристика искала слова 'assert' или 'traceback' в выводе, но
+    набор этого проекта печатает 'FAIL  <группа>' и exit 1 - ни того, ни
+    другого. Такая классификация отдавала реальный красный тест в смену
+    маршрута, то есть чинить то, что чинить нечем, и терять цикл rework."""
+    joined = " ".join(cmd).lower()
+    if "unittest" in joined or "pytest" in joined or "tox" in joined:
+        return True
+    script = cmd[0] if cmd else ""
+    name = os.path.basename(script)
+    return (name.startswith("test_") or name.endswith("_test.py")
+            or name.endswith("_tests.py") or name == "conftest.py")
+
+
 def classify_run(clean: dict) -> dict:
     """Отличить INFRA_FAILURE от MECHANICAL_FAILURE ПО ДОКАЗАТЕЛЬСТВАМ.
 
-    Красный тест - это Mechanical, а не инфраструктура. Таймаут, отсутствующий
-    инструмент или недоступный сервис - инфраструктура. Ошибка здесь стоит
-    цикл rework: сетевая проблема не лечится правкой кода, и наоборот."""
+    Инфраструктура - это когда раннер НЕ СМОГ отработать: таймаут,
+    отсутствующий инструмент, недоступный сервис, 5xx. Если же тестовый
+    раннер запустился и вернул ненулевой код, это механический фейл, как бы
+    странно ни выглядел его текст вывода."""
     for r in clean.get("runs") or []:
         code = r.get("exit_code")
         if code == 0:
@@ -378,15 +397,16 @@ def classify_run(clean: dict) -> dict:
         tail = (r.get("output_tail") or "").lower()
         infra = bool(r.get("timed_out")) or code in INFRA_EXIT or \
             any(m in tail for m in INFRA_MARKERS)
-        # Утверждение теста - это механический фейл, даже если текст содержит
-        # слово «connection»: важна природа падения, а не слово.
-        looks_like_assertion = ("assert" in tail or "traceback (most recent"
-                                in tail) and not r.get("timed_out")
-        kind = MECHANICAL_FAILURE if looks_like_assertion else INFRA_FAILURE
-        if r.get("timed_out"):
+        if infra:
+            kind = INFRA_FAILURE
+        elif _looks_like_test_runner(list(r.get("cmd") or [])) or \
+                "assert" in tail or "traceback (most recent" in tail or \
+                "groups failed" in tail or tail.lstrip().startswith("fail"):
+            kind = MECHANICAL_FAILURE
+        else:
             kind = INFRA_FAILURE
         return {"kind": kind, "action": action_for(kind),
-                "evidence": "exit=%s cmd=%s" % (code, " ".join(r["cmd"])),
+                "evidence": "exit=%s cmd=%s" % (code, " ".join(r.get("cmd") or [])),
                 "rerun_allowed": rerun_allowed(kind)}
     return {"kind": "", "action": "", "evidence": "all runs exited 0",
             "rerun_allowed": True}

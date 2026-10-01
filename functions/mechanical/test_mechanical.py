@@ -373,6 +373,39 @@ def test_manual_criterion_is_never_executed_as_evidence():
 
 
 @test
+def test_a_project_style_failure_output_is_mechanical_not_infra():
+    """Найдено на сквозном прогоне: набор этого проекта печатает
+    'FAIL  <группа>' и выходит с 1 - ни 'assert', ни 'traceback'. Эвристика
+    искала именно эти слова и объявляла реальный красный тест сменой
+    маршрута, то есть чинить то, что чинить нечем."""
+    fails = []
+    style = "FAIL  some group\n        - expected 3, got 4\n1/35 groups failed\n"
+    for cmd in ([sys.executable, "functions/baseline/test_baseline.py"],
+                [sys.executable, "-m", "unittest", "discover"],
+                ["pytest", "-q"]):
+        v = mech.classify_run({"runs": [{"cmd": cmd, "exit_code": 1,
+                                         "timed_out": False,
+                                         "output_tail": style, "log": "x"}]})
+        if v["kind"] != mech.MECHANICAL_FAILURE:
+            fails.append("%s -> %s, expected MECHANICAL_FAILURE"
+                         % (cmd[-1], v["kind"]))
+        if v["action"] != mech.REWORK_CODE:
+            fails.append("action %s, expected REWORK_CODE" % v["action"])
+    # А настоящая инфраструктура так и должна остаться инфраструктурой.
+    for clean in ({"runs": [{"cmd": ["pytest"], "exit_code": 124,
+                             "timed_out": True, "output_tail": style,
+                             "log": "x"}]},
+                  {"runs": [{"cmd": ["pytest"], "exit_code": 127,
+                             "timed_out": False,
+                             "output_tail": "'pytest' is not recognized",
+                             "log": "x"}]}):
+        v = mech.classify_run(clean)
+        if v["kind"] != mech.INFRA_FAILURE:
+            fails.append("a genuine infra signal became %s" % v["kind"])
+    return fails
+
+
+@test
 def test_clean_run_copy_does_not_swallow_the_project():
     """Найдено на живом прогоне: песочница чистого прогона разрослась до
     19.6 ГБ и выбила диск (WinError 112), потому что копировался весь проект
@@ -463,17 +496,34 @@ def test_timeout_and_missing_tool_are_infrastructure():
 
 @test
 def test_a_failing_run_is_not_misreported_as_infrastructure():
-    """Обратная сторона: сетевое слово в тексте не должно маскировать
-    настоящий пающий тест."""
+    """Слово 'connection' само по себе не должно переводить падение ассерта в
+    инфраструктуру.
+
+    Раньше этот тест требовал обратного - чтобы 'connection refused'
+    игнорировался. Теперь он этого НЕ требует: 'connection refused', 'proxy',
+    'ssl', 'certificate' и коды 5xx - сильные инфраструктурные признаки,
+    ставить их выше текста вывода правильно, потому что раннер в таком случае
+    действительно не смог отработать. Тест проверяет именно слабый случай:
+    обычный ассерт, где слово 'connection' встречается как часть сообщения."""
     fails = []
-    clean = {"runs": [{"cmd": ["pytest"], "exit_code": 1, "timed_out": False,
-                       "output_tail": "E   assert app.add(1,2)==3\n"
-                                      "E   assert 4 == 3\nAssertionError\n"
-                                      "connection refused while loading conftest",
+    clean = {"runs": [{"cmd": [sys.executable, "test_thing.py"],
+                       "exit_code": 1, "timed_out": False,
+                       "output_tail": "E   assert app.connect(1) == 3\n"
+                                      "E   assert 5 == 3\nAssertionError\n"
+                                      "connection settings differ from the "
+                                      "expected baseline",
                        "log": "x"}]}
     v = mech.classify_run(clean)
     if v["kind"] != mech.MECHANICAL_FAILURE:
         fails.append("an assertion was classified %s" % v["kind"])
+    # Сильные маркеры, наоборот, обязаны оставаться инфраструктурой.
+    for marker in ("connection refused", "proxy", "certificate error"):
+        c2 = {"runs": [{"cmd": [sys.executable, "test_thing.py"],
+                        "exit_code": 1, "timed_out": False,
+                        "output_tail": "E   assert x == 1\n%s" % marker,
+                        "log": "x"}]}
+        if mech.classify_run(c2)["kind"] != mech.INFRA_FAILURE:
+            fails.append("%r was not treated as infrastructure" % marker)
     return fails
 
 
