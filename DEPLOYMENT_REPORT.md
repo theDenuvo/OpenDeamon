@@ -237,6 +237,142 @@ ALL coding to `opencode run -m opencode/<free>`; never `openrouter/*`
 inside opencode CLI (shares the 50/day). $10 OR top-up noted (50→1000/day
 forever) — user deferred until salary, 0₽ rule holds.
 
+## 26-bis. Emergency paid reserve (GPT) — procedure, **НЕ АКТИВИРОВАНО** (2026-10-04)
+
+Status, verbatim: the reserve is **документировано, не активировано**. There is
+no paid route in `hermes-home/config.yaml` — `model:` is `openrouter`, and every
+entry of `fallback_providers`, of `auxiliary.review.fallback_chain`, of
+`auxiliary.vision.fallback_chain` and of the MoA preset is `:free` or local.
+This section is a runbook for the day the cloud `:free` tier dies as a whole.
+Nothing below runs in the build, and no key for it exists yet.
+
+### (а) Триггер, и чем он отличается от 429/503 на одном провайдере
+
+The trigger is: **the cloud `:free` catalog is gone as a whole** — the
+OpenRouter `:free` entries this project routes to are no longer served (catalog
+change, promo end). Every other code is a per-provider condition that resolves
+by itself or by fixing the environment, and none of them are a reason to pay:
+
+| Code / symptom | What it actually means | Where it is fixed |
+|---|---|---|
+| 429 `free-models-per-day` | quota spent; resets 03:00 MSK. `congested` — free-rank deliberately does not punish it | §8, §26, `free-rank/rank.py:118-119` |
+| 5xx, or a dead endpoint holding the connection 75-81 s | upstream congestion; two attempts before a model is declared dead | `hermes-home/config.yaml` comment on `model.default` |
+| 401 | the KEY — there is no key at all. Never a catalog change | SCHEME §3-bis |
+| 403 with a known-good key | the tunnel or the geography, not the key. Regenerating keys on a 403 is pure waste | SCHEME §3-bis, `hermes-home/SOUL.md` |
+| 451 (NVIDIA NIM) | sanctions block | SCHEME §3-bis |
+| 404, or the id gone from `GET /v1/models` | that endpoint is `dead` and free-rank excludes it | `free-rank/rank.py:118` |
+
+Diagnosis order, never reversed: **VPN first, keys second** (SCHEME §3-bis).
+With the tunnel down, OpenRouter answers 403 and the entire scheme looks like a
+dead key. Only after the tunnel is confirmed do the codes mean catalog death.
+
+### (б) Что поднимается и какими переменными
+
+Nothing already in the repository is reused.
+
+- `OPENAI_API_KEYS` is **dead — HTTP 401 "Incorrect API key"** (verified
+  2026-09-30, `TODO.md:1421`). `bootstrap.ps1:78-80` deliberately does not load
+  it. Never revive it.
+- Paid OpenAI is rejected as a path: §20 ("Rejected: OpenAI/Anthropic/DeepSeek/
+  xAI API, Zen/Go, Cohere, time-trial credits"), §19 lists paid-model policy as
+  a deferred v0.2 item, and `TODO.md` §2-bis.8 closes it again. (§12-14 is NOT a
+  citation for this: it lists disabled toolsets and needs no keys. Citing it
+  would be exactly the kind of plausible-looking but wrong reference this
+  project has already paid for twice.) The reserve is therefore a *new,
+  owner-created* key, and the
+  owner explicitly re-decides the $0 law at that moment — that is the whole
+  point of writing the procedure instead of shipping the route.
+- Mechanism, taken from what this build already proves: a `custom` entry with
+  `base_url` + `key_env`. `hermes-home/config.yaml` documents it verbatim for
+  the Groq rail — `key_env` reads through the profile-scoped `secret_scope`, so
+  the secret never lands in this git-tracked file even transiently. Vendor-
+  standard variable name: `OPENAI_API_KEY`
+  (`hermes-home/skills/autonomous-ai-agents/codex/SKILL.md:30`).
+- **No GPT model id is recorded anywhere in this repository**, so none is written
+  here. The owner reads it off the live catalogue that day; copying an id out of
+  a document is how a stale paid id ends up routing traffic.
+- The key goes into an owner-owned secrets file
+  (`A:\AI\daemon\config\secrets.local.toml`, or `A:\OpenDeamon\secrets\gateway.env`
+  for the `KEY=value` form) which the assistant never opens (ARCHITECTURE, "What
+  was deliberately NOT built"), and is exported process-scoped by
+  `bootstrap.ps1`. Never into `config.yaml`, never into git, never printed.
+
+### (в) Лимит на ключе: $1/день, и почему именно маленький
+
+The project law is $0 (§26: spend limit $1/day, paid usage $0.00 — a limit is
+not a budget). A hard cap of exactly that size is what makes the reserve safe
+rather than merely small. The realistic worst case of one long agent day is MoA
+fan-out plus up to 10 delegated children (`config.yaml`, `delegation`), and
+"every free lane is dead" is precisely the condition in which nothing gets
+throttled by a 429. Above roughly $1/day the failure mode stops being "we paid a
+little for uptime" and becomes "we did not notice a loop". Set the cap on the
+vendor's key page *before* the first call.
+
+### (г) Порядок действий — только конфигом, `/model` вручную никогда
+
+The project routes without `/model` on purpose (TODO §4: `smart_model_routing`
+is dead code, no per-task router exists, ARCHITECTURE "Model policy"). A manual
+model switch would be invisible to `config.yaml`, to free-rank's `--apply` and
+to the routing-map check — which is exactly how a paid route becomes silent.
+
+1. Confirm the tunnel (§3-bis), then read the catalogue: the free rail's
+   `GET /v1/models`. The trigger is that the `:free` ids the config needs are
+   gone — not a 429 on one of them.
+2. Owner creates the key with the $1/day cap and places it in the secrets file.
+   Owner only; the assistant does not read that file.
+3. `bootstrap.ps1` — add `OPENAI_API_KEY` to the allow-list at
+   `bootstrap.ps1:80` beside `NVIDIA_API_KEY` / `GROQ_API_KEY`, so it is
+   exported process-scoped and never printed. Revert this line together with
+   step (д) 2.
+4. `hermes-home/config.yaml` — add the reserve as the **last** element, never
+   first: after the existing `:free` entries of `fallback_providers` (a
+   `provider: custom` element with `base_url: https://api.openai.com/v1`,
+   `model: <id from the live catalogue>`, `key_env: OPENAI_API_KEY`); if the
+   core's `model:` block does not accept `custom` + `base_url` + `key_env`, the
+   paid provider goes there as `model.provider` / `model.default` instead.
+   Which of the two the resolver accepts is settled by the verification in step
+   5, not by a guess — an unverified route is worse than no route.
+5. Verify by command, not by eye: restart the consumer, then
+   `hermes doctor` (auth resolves, issue count did not grow) and
+   `python functions/verdict/verdict.py routes --config hermes-home/config.yaml --core-provider openrouter`
+   — the reserve must appear only as the tail.
+   Live proof: one real turn returning HTTP 200 with non-empty content. The
+   emptiness trap is real and already documented (SOUL.md, `max_tokens` spent on
+   reasoning returns 200 with no content).
+6. Log the activation: date, the catalogue evidence that `:free` was gone, and
+   spend before/after against the $0.00 baseline of §26.
+
+### (д) Как вернуть `:free` обратно и чем это доказать
+
+Same path, in reverse, still config-only. The point of this item is not the
+mechanics — they are the same two edits as (г) — but the proof at the end:
+«вернулось» без доказательства означает «кажется, вернулось».
+
+1. Remove the reserve element from `hermes-home/config.yaml`.
+2. Remove `OPENAI_API_KEY` from the `bootstrap.ps1:80` allow-list and from the
+   secrets file.
+3. `python functions/free-rank/rank.py` — a dry run must show `:free` eligible
+   again; use `--apply` only if the dry run names a different winner (§33
+   hysteresis keeps the incumbent otherwise).
+4. Verify: `hermes doctor`; `verdict.py routes ...` shows no paid provider;
+   `python functions/routing-map/test_routing_map.py` and
+   `python functions/mcp-policy/test_mcp_policy.py` green (these are the $0-rail
+   checks — `test_no_paid_model_is_reachable_through_the_config` is the
+   interlock that turns a forgotten reserve red); one live turn on a `:free` id
+   returns 200 with non-empty content.
+5. Read the spend line: it must be $0.00 for the day the reserve was used. If it
+   is not, the revert did not remove every paid route — that is the failure this
+   whole section exists to make visible.
+
+### (е) НЕ АКТИВИРОВАНО — явная строка
+
+**This reserve is documented and NOT activated: не активировано.** As of this
+commit there is no paid GPT entry in `model:`, in `fallback_providers`, in any
+`fallback_chain`, or in the MoA preset, and no paid key is loaded by
+`bootstrap.ps1`. It is a procedure, not a route, and
+`functions/reserve/test_reserve_not_activated.py` asserts exactly that — so the
+claim is checked on every CI run instead of promised here.
+
 ## 27. Hands bridge (chat finally has hands)
 
 Problem: OWUI raw models have no tools/persona ("I can't launch apps").

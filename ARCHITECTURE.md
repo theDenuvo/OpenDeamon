@@ -70,6 +70,11 @@ binaries A:\hermes\bin + C:\Users\cheli\AppData\Local\hermes\hermes-agent)
    (verified against provider docs + fallback provider table). The free
    tier lives in OpenCode itself (`opencode/*-free` models, keyless) and
    is used for the OpenCode worker leg.
+6. Emergency paid reserve (GPT): documented, **не активировано**. If the
+   cloud `:free` catalog dies as a whole, the paid runway is raised by
+   config only (`custom` + `key_env`, cap $1/day, never `/model` by hand)
+   and removed the same way. Full runbook, including how that case is told
+   apart from a 429/503 on one provider: `DEPLOYMENT_REPORT.md` §26-bis.
 
 ## Cost control notes (observed behavior)
 

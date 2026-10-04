@@ -44,7 +44,8 @@ jobs:
                    functions/mcp-policy/test_mcp_policy.py \
                    functions/routing-map/test_routing_map.py \
                    functions/hygiene/test_hygiene.py \
-                   functions/startup/test_startup.py ; do
+                   functions/startup/test_startup.py \
+                   functions/reserve/test_reserve_not_activated.py ; do
             [ -f "$f" ] || { echo "MISSING $f"; fail=1; continue; }
             if out=$(python "$f" 2>&1); then
               echo "PASS  $(printf '%-52s' "$f") $(printf '%s' "$out" | grep -c '^pass') groups"
