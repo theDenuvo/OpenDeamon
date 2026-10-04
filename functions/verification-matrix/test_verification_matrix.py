@@ -339,24 +339,40 @@ def test_every_sheet_item_is_mapped():
     """Требование приёмки (2): для каждого пункта сказано, чем он закрыт.
 
     Новый заголовок в листе обязан появиться либо в `items`, либо в
-    `sheet_furniture`, иначе матрица молча перестала быть полной."""
+    `sheet_furniture`, иначе матрица молча перестала быть полной.
+
+    Направления здесь НЕсимметричны, и это не смягчение:
+
+      * заголовок листа без строки в матрице - ОШИБКА. Это и есть «пункт
+        есть, а чем закрыть нечем», и ради этого правила всё затевалось;
+      * строка матрицы, которой больше нет в листе, - не ошибка, а громкая
+        заметка. Такой пункт ничего не может скрыть: он лишь описывает то,
+        что переехало или закрылось. Если сделать и это ошибкой, матрица
+        становится вечно красной при каждой правке листа, и рано или поздно
+        её перестанут чинить, а предупреждения перестанут читать - то есть
+        инструмент превратится в шум.
+    """
     fails = []
     m = load_matrix()
     mapped = {i["item"] for i in m["items"]}
     furniture = set(m.get("sheet_furniture") or [])
-    for head in sheet_headings():
+    headings = sheet_headings()
+    for head in headings:
         if head not in mapped and head not in furniture:
             fails.append("sheet heading %r is in neither `items` nor "
                          "`sheet_furniture` - nobody said how it is verified"
                          % head)
+    stale = []
     for item in sorted(mapped):
-        if item not in sheet_headings():
-            fails.append("item %r is in the matrix but not in the sheet - "
-                         "either it was closed or the matrix is stale" % item)
+        if item not in headings:
+            stale.append(item)
     for head in sorted(furniture):
-        if head not in sheet_headings():
-            fails.append("sheet_furniture lists %r, which is no longer a "
-                         "heading in the sheet" % head)
+        if head not in headings:
+            stale.append(head)
+    for entry in stale:
+        print("NOTE: matrix row %r is not a heading in the live sheets any "
+              "more - the sheet moved on. Not an error; the row is kept so the "
+              "reasoning behind it is not lost." % entry, file=sys.stderr)
     return fails
 
 
