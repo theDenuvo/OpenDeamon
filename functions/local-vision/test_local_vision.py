@@ -271,16 +271,43 @@ def test_low_max_tokens_reproduces_the_empty_content_trap():
     return []          # не воспроизвелось на этой модели - не наша беда
 
 
+# Группы, которым нужен живой Ollama. Остальные (эталон картинки) считаются
+# офлайн и потому выполняются ВСЕГДА, даже когда локальной модели нет.
+#
+# Раньше набор при недоступном Ollama выходил из main() с кодом 0, не выполнив
+# НИ ОДНОЙ проверки: печатал одну строку `SKIP: ...` и рапортовал успех. Это
+# единственное место в репозитории, где зелёный код не означает проверки, -
+# и оно молчало ровно на машине, где проверять нечего. Теперь отсутствие
+# локальной модели объявляется пропуском конкретных групп, офлайн-группа
+# всё равно выполняется, а нулевое число выполненных проверок больше не
+# может быть кодом 0 (см. конец main()).
+NETWORK_GROUPS = {
+    "test_ollama_is_up_and_declares_vision",
+    "test_the_picture_actually_reaches_the_model",
+    "test_the_answer_matches_the_ground_truth",
+    "test_low_max_tokens_reproduces_the_empty_content_trap",
+}
+
+
 def main() -> int:
-    if not ollama_up():
-        print("SKIP: ollama is not running at %s" % OLLAMA)
-        print("The configured fallback_chain carries vision in that case.")
-        return 0
-    ram = free_ram_gb()
-    print("free RAM: %s GB   truth: %s   expected box (0-1000): %s"
-          % (ram, TRUTH, NORM_BOX))
-    failed = 0
+    up = ollama_up()
+    if not up:
+        print("ollama is not running at %s; the network groups are skipped, "
+              "the offline ones still run" % OLLAMA)
+    else:
+        # Диагностика оставлена как была: сколько свободно RAM, какой
+        # эталон и в какой сетке координат ждём ответ.
+        ram = free_ram_gb()
+        print("free RAM: %s GB   truth: %s   expected box (0-1000): %s"
+              % (ram, TRUTH, NORM_BOX))
+    failed = skipped_n = 0
     for label, fn in TESTS:
+        if not up and fn.__name__ in NETWORK_GROUPS:
+            skipped_n += 1
+            print("SKIP  %s" % label)
+            print("        - ollama is not running at %s; the configured "
+                  "fallback_chain carries vision in that case" % OLLAMA)
+            continue
         try:
             fails = list(fn() or [])
         except Exception as exc:  # noqa: BLE001
@@ -293,10 +320,18 @@ def main() -> int:
         else:
             print("pass  %s" % label)
     print()
+    ran = len(TESTS) - skipped_n
+    print("groups: %d total, %d passed, %d failed, %d skipped"
+          % (len(TESTS), ran - failed, failed, skipped_n))
     if failed:
-        print("%d/%d groups failed" % (failed, len(TESTS)))
         return 1
-    print("all pass (%d groups)" % len(TESTS))
+    if ran == 0:
+        # Правило, а не частная правка набора: успех без выполненных
+        # проверок - это не успех. Код 2 отличается от 1, чтобы «окружение
+        # не дало проверить» не читалось как «продукт сломан».
+        print("NO CHECKS RAN: %d groups, all skipped, nothing was verified. "
+              "A zero-check run must not report success." % len(TESTS))
+        return 2
     return 0
 
 

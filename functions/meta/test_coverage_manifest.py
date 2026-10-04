@@ -199,23 +199,65 @@ def test_no_group_can_pass_without_asserting_anything():
 
     Группа, из которой убрали все утверждения, печатает `pass` и снижает
     счётчик выполненных групп - то есть маскирует исчезновение проверки
-    под выполненную проверку."""
+    под выполненную проверку.
+
+    ОХВАТ: ВСЕ наборы манифеста, включая `ci:false`. Раньше этот обход
+    заканчивался на `if not entry.get("ci"): continue`, и именно поэтому
+    набор вне CI мог выродиться в пустоту незамеченным.
+
+    Исключение возможно, но только если группа названа В МАНИФЕСТЕ и с
+    причиной: одна строка в данных, а не молчание в коде."""
     fails = []
     for entry in read_manifest()["suites"]:
-        if not entry.get("ci"):
-            continue          # локальные наборы CI не исполняет
         path = _ROOT / entry["path"]
         if not path.is_file():
             continue
+        declared = {g.get("name"): g for g in (entry.get("non_asserting_groups")
+                                              or [])}
+        for g in declared.values():
+            if not g.get("reason"):
+                fails.append("%s: non_asserting_groups entry %r has no reason"
+                             % (entry["path"], g.get("name")))
         tree = ast.parse(path.read_text(encoding="utf-8"))
         by_name = {n.name: n for n in ast.walk(tree)
                    if isinstance(n, ast.FunctionDef)}
         for name in sorted(registered_groups(tree)):
-            sites = assertion_sites(by_name.get(name))
-            if sites == 0:
+            if name in declared:
+                continue
+            if assertion_sites(by_name.get(name)) == 0:
                 fails.append("%s: group %r has no assertion site - it can "
-                             "never fail, so it is not a check"
-                             % (entry["path"], name))
+                             "never fail, so it is not a check (declare it in "
+                             "non_asserting_groups with a reason, or make it "
+                             "assert something)" % (entry["path"], name))
+    return fails
+
+
+@test
+def test_a_zero_check_run_must_be_declared_not_assumed():
+    """Правило, а не частная правка: НИ ОДИН набор не имеет права завершиться
+    кодом 0, выполнив ноль проверок.
+
+    Лазейка была ровно в манифесте: у наборов с `ci:false` стоял
+    `min_executed: 0`, и это читалось как «здесь ноль проверок - нормально».
+    На деле `local-vision` печатал `SKIP: ...` и выходил с кодом 0, выполнив
+    ноль утверждений, - зелёный результат без единой проверки.
+
+    Теперь нулевой порог допустим ТОЛЬКО при явном `allow_zero_checks: true`
+    с причиной, и одинаково для `ci:true` и `ci:false`. Причина обязательна:
+    «ноль проверок тут законен, потому что <вот это>»."""
+    fails = []
+    for entry in read_manifest()["suites"]:
+        if entry.get("min_executed", 0) != 0:
+            continue
+        if not entry.get("allow_zero_checks"):
+            fails.append("%s: min_executed is 0 with no `allow_zero_checks: "
+                         "true` - a suite may not be green without running a "
+                         "single check, and if it legitimately cannot, that "
+                         "must be declared here with a reason"
+                         % entry["path"])
+        elif not str(entry.get("reason") or "").strip():
+            fails.append("%s: allow_zero_checks is set with no reason"
+                         % entry["path"])
     return fails
 
 
@@ -270,8 +312,13 @@ def reconcile(observed_path: str) -> list[str]:
 
     Формат observed.tsv (пишет шаг portable suites):
         <path>\t<rc>\t<ran>\t<skipped>
+
+    Проверяются две вещи: покрытие (не потеряно ли) и ЗЕЛЁНОСТЬ БЕЗ
+    ПРОВЕРОК (код 0 при нуле выполненных групп допустим только там, где
+    манифест это объявил).
     """
     fails = []
+    manifest = read_manifest()
     observed = {}
     for raw in Path(observed_path).read_text(encoding="utf-8").splitlines():
         if not raw.strip():
@@ -282,7 +329,7 @@ def reconcile(observed_path: str) -> list[str]:
             continue
         observed[parts[0]] = {"rc": int(parts[1]), "ran": int(parts[2]),
                               "skipped": int(parts[3])}
-    for entry in read_manifest()["suites"]:
+    for entry in manifest["suites"]:
         if not entry.get("ci"):
             continue
         path = entry["path"]
@@ -296,7 +343,12 @@ def reconcile(observed_path: str) -> list[str]:
                          "manifest requires (floor %d, %d skipped)"
                          % (path, got["ran"], entry["groups"],
                             entry["min_executed"], got["skipped"]))
-    for path in sorted(set(observed) - {e["path"] for e in read_manifest()["suites"]}):
+        if got["rc"] == 0 and got["ran"] == 0 \
+                and not entry.get("allow_zero_checks"):
+            fails.append("GREEN WITHOUT CHECKS: %s exited 0 having executed no "
+                         "check at all, and the manifest declares no "
+                         "allow_zero_checks for it" % path)
+    for path in sorted(set(observed) - {e["path"] for e in manifest["suites"]}):
         fails.append("%s ran but is not in the manifest" % path)
     return fails
 
