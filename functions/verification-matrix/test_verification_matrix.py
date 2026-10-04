@@ -42,9 +42,45 @@ import render  # noqa: E402
 
 MATRIX = os.path.join(HERE, "matrix.json")
 MANIFEST = os.path.join(_ROOT, "functions", "meta", "coverage-manifest.json")
-SHEET = os.path.join(_ROOT, "TODO.md")
+SHEETS = {
+    # Листы с открытыми пунктами. `PASSED.md` - архив, его не читаем: оттуда
+    # задачи не берутся по правилу самого листа.
+    "TODO.md": "TODO",
+    "TOTEST.md": "TOTEST",
+}
+
+# Заголовок, похожий на задачу, не может быть «мебелью листа».
+#
+# Это и есть обход, который делал матрицу бесполезной: любой пункт можно было
+# объявить `sheet_furniture`, и проверка «каждый заголовок либо пункт, либо
+# мебель» проходила, не сказав ни слова о его проверке. Так шесть задач
+# А1/А2/А3/А6/А7/А8 и девять разделов 2-bis остались без единого «чем
+# закрыто» - при том, что задача A7 как раз требовала сказать это для
+# каждого пункта.
+#
+# Формы выводятся механически из вида заголовка, а не из доброй воли: `А1`,
+# `ФАЗА 3`, `P1`, `2-bis.5`, а также слова «ТРЕБУЕТ», «НЕ ЗАКРЫТО», «Уборка»,
+# «не сделано». Мебелью остаётся «как читать», «порядок», «факты», «решения
+# владельца» - там задач нет по смыслу.
+TASK_SHAPES = (re.compile(r"^А\d"), re.compile(r"^ФАЗА"),
+               re.compile(r"^P\d"),
+               # Подпункт вида «3.2 Раскладка панелей» или «2-bis.1 Проверка
+               # ключей». Именно `\d+\.\d`, а не `\d+[.\-]`: иначе под правило
+               # попадает «0. Контекст и закон», который контекстом и
+               # является, а не задачей.
+               re.compile(r"^\d+\.\d"), re.compile(r"^\d+-bis\."))
+TASK_WORDS = ("ТРЕБУЕТ", "НЕ ЗАКРЫТО", "НЕ ВЫПОЛНЕНО", "Уборка",
+              "не сделано", "решений владельца")
+
+
+def looks_like_a_task(head: str) -> bool:
+    if any(rx.search(head) for rx in TASK_SHAPES):
+        return True
+    low = head.lower()
+    return any(w.lower() in low for w in TASK_WORDS)
 
 MACHINES = {"server", "windows", "gpu", "live-provider", "owner"}
+STATUSES = {"verified", "open", "owner"}
 TESTS = []
 
 
@@ -92,19 +128,100 @@ def suite_labels(path: str) -> set:
 
 
 def sheet_headings() -> list:
-    """Заголовки листа, включая заголовок первого уровня.
+    """Заголовки живых листов: `TODO.md` (открытые) и `TOTEST.md` (сделано,
+    но не проверено). Читаем, но не правим - листы ведёт оркестратор.
 
-    Читаем, но не правим: лист ведёт оркестратор."""
+    Две тонкости, обе вынужденные фактом, а не вкусом:
+
+      * `TODO.md` может содержать в себе начало другого документа (копию
+        `TOTEST.md` с его «Правила» и «Формат записи» - это не пункты
+        проекта). Признак такого вставленного документа - заголовок ПЕРВОГО
+        уровня, названный по имени ДРУГОГО листа. Признак не в уровне: в
+        `TODO.md` есть и `# ПЛАН РАБОТ`, и `# АРХИТЕКТУРА`, и это его
+        собственные разделы, а не чужие документы;
+      * пункт, перенесённый в `TOTEST.md`, остаётся открытым по смыслу -
+        «сделано, но не проверено» это не «закрыто». Поэтому живыми
+        считаются оба листа, а `PASSED.md` не читается вовсе.
+    """
     out = []
-    with open(SHEET, encoding="utf-8") as f:
-        for line in f:
-            m = re.match(r"^#{1,3} (.+?)\s*$", line)
-            if m:
-                out.append(m.group(1).strip())
+    for filename, own_title in SHEETS.items():
+        foreign = {title for name, title in SHEETS.items() if name != own_title}
+        path = os.path.join(_ROOT, filename)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"^#{1,3} (.+?)\s*$", line)
+                if not m:
+                    continue
+                title = m.group(1).strip()
+                if title.startswith(own_title):
+                    continue
+                if line.startswith("# ") and any(title.startswith(n)
+                                                  for n in foreign):
+                    break        # вставлен другой лист - наш кончился
+                out.append(title)
     return out
 
 
 # --------------------------------------------------------------------------
+
+@test
+def test_a_task_cannot_be_declared_sheet_furniture():
+    """Обход, который чинится здесь: задача, объявленная «мебелью листа»,
+    молча теряет свою проверку.
+
+    Проверка формы механическая, поэтому переименовать пункт в «Факты» не
+    получится, а вот `А7. …` или `2-bis.5 …` попасть в мебель больше не могут.
+    """
+    fails = []
+    m = load_matrix()
+    mapped = {i["item"] for i in m["items"]}
+    for head in m.get("sheet_furniture") or []:
+        if looks_like_a_task(head):
+            fails.append("%r looks like a task but is filed as sheet "
+                         "furniture, so nothing says how it is verified"
+                         % head)
+        if head in mapped:
+            fails.append("%r is both an item and furniture" % head)
+    return fails
+
+
+@test
+def test_every_item_states_its_verification_status():
+    """Три состояния, и ни одного четвёртого «не знаю».
+
+    `verified` - есть проверка, и она обязана разрешаться.
+    `open`     - задача не реализована, проверять нечем; обязан быть назван
+                 `why_not`, а доказательства быть НЕ должно, иначе пункт
+                 был бы помечен выполненным.
+    `owner`    - закрывает человек; `owner_required` с причиной.
+
+    Раньше трёх состояний не было, и «проверка не указана» выглядела как
+    обычный `items` без поля `proof` - то есть как будто закрытый пункт.
+    """
+    fails = []
+    for row in load_matrix()["items"]:
+        status = row.get("status")
+        if status not in STATUSES:
+            fails.append("item %r has status %r (expected one of %s)"
+                         % (row["item"], status, ", ".join(sorted(STATUSES))))
+            continue
+        if status == "verified" and not row.get("proof"):
+            fails.append("item %r is verified but names no proof - that is "
+                         "exactly 'проверка не указана'" % row["item"])
+        if status == "open":
+            if not str(row.get("why_not") or "").strip():
+                fails.append("item %r is open with no `why_not`" % row["item"])
+            if row.get("proof"):
+                fails.append("item %r is open yet carries a proof - either it "
+                             "is done (then verified) or the proof is stale"
+                             % row["item"])
+        if status == "owner" and not row.get("owner_required"):
+            fails.append("item %r is owner yet not owner_required"
+                         % row["item"])
+    return fails
+
 
 @test
 def test_every_reference_points_at_a_real_group():
@@ -261,9 +378,10 @@ def test_nothing_is_unverifiable_without_being_named():
         if has_proof and owner:
             fails.append("item %r is both proven and owner_required - one of "
                          "the two is a lie" % row["item"])
-        if not has_proof and not owner:
-            fails.append("item %r has neither a proof nor `owner_required` - "
-                         "this is exactly the forbidden gap" % row["item"])
+        if row.get("status") == "owner" and not owner:
+            fails.append("item %r is owner yet not owner_required - the "
+                         "forbidden gap the acceptance (3) names"
+                         % row["item"])
         if owner and not str(row.get("reason") or "").strip():
             fails.append("item %r is owner_required with no reason"
                          % row["item"])

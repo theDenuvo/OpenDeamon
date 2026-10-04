@@ -203,114 +203,228 @@
     {
       "item": "А2-bis. Адаптер OpenCode — не только для тестов, а как 24/7-эндпоинт",
       "machine": "live-provider",
-      "proof": "python functions/opencode-adapter/acceptance_live.py"
+      "proof": "python functions/opencode-adapter/acceptance_live.py",
+      "status": "verified"
     },
     {
       "item": "А5. Правило «ноль проверок — не успех» как закон репозитория",
       "machine": "server",
-      "proof": "functions/meta/test_coverage_manifest.py::a zero check run must be declared not assumed"
+      "proof": "functions/meta/test_coverage_manifest.py::a zero check run must be declared not assumed",
+      "status": "verified"
     },
     {
       "item": "А4. Контракты переносимости: EOL, аргументы, кодировка",
       "machine": "server",
-      "proof": "functions/workerstate/test_worker_state.py::rollback restores the baseline, re-measured"
+      "proof": "functions/workerstate/test_worker_state.py::rollback restores the baseline, re-measured",
+      "status": "verified"
     },
     {
       "item": "НЕ ЗАКРЫТО — группа, которая не может упасть (`test_local_vision`)",
       "machine": "server",
       "proof": "functions/meta/test_coverage_manifest.py::no group can pass without asserting anything",
-      "note": "обход снят и ловер добавлен; сама группа переписать нельзя без живого Ollama, поэтому она объявлена в манифесте как non_asserting"
+      "note": "обход снят и ловер добавлен; сама группа переписать нельзя без живого Ollama, поэтому она объявлена в манифесте как non_asserting",
+      "status": "verified"
     },
     {
       "item": "6.5 Уборка",
       "machine": "gpu",
       "proof": "python functions/imggen/comfy_gen.py",
-      "note": "уборка касается локальных весов ComfyUI и qwen3-vl"
+      "note": "уборка касается локальных весов ComfyUI и qwen3-vl",
+      "status": "verified"
     },
     {
       "item": "ФАЗА 6. Локальное зрение — Ollama уже стоит",
       "machine": "gpu",
-      "proof": "functions/local-vision/test_local_vision.py::the answer matches the ground truth"
+      "proof": "functions/local-vision/test_local_vision.py::the answer matches the ground truth",
+      "status": "verified"
     },
     {
       "item": "ФАЗА 3. Один вход — Desktop",
       "machine": "windows",
-      "proof": "functions/startup/test_startup.py::the real desktop binary exists and is not a lnk"
+      "proof": "functions/startup/test_startup.py::the real desktop binary exists and is not a lnk",
+      "status": "verified"
     },
     {
       "item": "3.2 Раскладка панелей",
       "machine": "windows",
-      "proof": "hermes computer-use doctor"
+      "proof": "hermes computer-use doctor",
+      "status": "verified"
     },
     {
       "item": "ФАЗА 8. Саморасширение",
       "machine": "windows",
       "proof": "hermes skill install",
-      "note": "живая установка скилла из хаба нужна на машине, где стоит Hermes"
+      "note": "живая установка скилла из хаба нужна на машине, где стоит Hermes",
+      "status": "verified"
     },
     {
       "item": "8.2 Включить гейты",
       "machine": "windows",
       "proof": "hermes doctor",
-      "note": "approval-гейты видны в работающем Hermes, не в репозитории"
+      "note": "approval-гейты видны в работающем Hermes, не в репозитории",
+      "status": "verified"
     },
     {
       "item": "ФАЗА 10. Уборка и гигиена",
       "machine": "server",
       "proof": "functions/hygiene/test_hygiene.py::project text files are valid utf8",
-      "note": "часть пункта про диски C:/A:/B: вынесена отдельной строкой - она не серверная"
+      "note": "часть пункта про диски C:/A:/B: вынесена отдельной строкой - она не серверная",
+      "status": "verified"
     },
     {
       "item": "P1 — потеря данных, рассинхрон, риск для соседних систем",
       "machine": "owner",
       "owner_required": true,
-      "reason": "пункт объединяет несколько независимых вещей, часть из которых не проверяется кодом вовсе: решения владельца по дискам и по ключам. Строки ниже разбирают его по частям"
+      "reason": "пункт объединяет несколько независимых вещей, часть из которых не проверяется кодом вовсе: решения владельца по дискам и по ключам. Строки ниже разбирают его по частям",
+      "status": "owner"
     },
     {
       "item": "6. C: — 3.4 ГБ свободно из 110 ГБ",
       "machine": "owner",
       "owner_required": true,
-      "reason": "только Windows-диски C:/A:, правило владельца «C: не трогать». Настоящая причина - A:\\OpenDeamon\\cache\\hf = 32.95 ГБ; дублирования нет (fsutil hardlink list). Закрывается решением владельца о переносе, а не тестом"
+      "reason": "только Windows-диски C:/A:, правило владельца «C: не трогать». Настоящая причина - A:\\OpenDeamon\\cache\\hf = 32.95 ГБ; дублирования нет (fsutil hardlink list). Закрывается решением владельца о переносе, а не тестом",
+      "status": "owner"
     },
     {
       "item": "⚠️ П1-п.6: диск. Настоящая причина найдена, но не устранена",
       "machine": "owner",
       "owner_required": true,
-      "reason": "то же, что и в 6. C:, плюс предложение владельцу: порог «загрузка >5 ГБ начинается с проверки свободного места». Порог - политика, а не проверка"
+      "reason": "то же, что и в 6. C:, плюс предложение владельцу: порог «загрузка >5 ГБ начинается с проверки свободного места». Порог - политика, а не проверка",
+      "status": "owner"
     },
     {
       "item": "⚠️ ТРЕБУЕТ РЕШЕНИЯ — не закрывать фазу, пока не решено",
       "machine": "owner",
       "owner_required": true,
-      "reason": "по определению требует решения владельца; сервер не может закрыть пункт, который ждёт выбора"
+      "reason": "по определению требует решения владельца; сервер не может закрыть пункт, который ждёт выбора",
+      "status": "owner"
     },
     {
       "item": "2-bis.7 Подключение (не сделано)",
       "machine": "owner",
       "owner_required": true,
-      "reason": "нужны ключи Groq/NVIDIA в allow-list и решение владельца, какой рельс основной"
+      "reason": "нужны ключи Groq/NVIDIA в allow-list и решение владельца, какой рельс основной",
+      "status": "owner"
     },
     {
       "item": "2-bis.3 Groq: квоты и жёсткое ограничение",
       "machine": "live-provider",
       "proof": "hermes doctor",
-      "note": "живой замер квот Groq; сам лимит зафиксирован в config.yaml, его проверяет routing-map"
+      "note": "живой замер квот Groq; сам лимит зафиксирован в config.yaml, его проверяет routing-map",
+      "status": "verified"
     },
     {
       "item": "Окружение на сервере: что нужно поставить (задачи воркеру)",
       "machine": "owner",
       "owner_required": true,
-      "reason": "установка пакетов на сервер - решение владельца по политике хоста, а не проверка проекта"
+      "reason": "установка пакетов на сервер - решение владельца по политике хоста, а не проверка проекта",
+      "status": "owner"
     },
     {
       "item": "АРХИТЕКТУРА: задачи на реализацию",
       "machine": "server",
       "proof": "functions/verification-matrix/test_verification_matrix.py::every sheet item is mapped",
-      "note": "umbrella для А1…А8; сам факт «каждый пункт чем-то закрыт» проверяется набором"
+      "note": "umbrella для А1…А8; сам факт «каждый пункт чем-то закрыт» проверяется набором",
+      "status": "verified"
+    },
+    {
+      "item": "А7. Матрица «что чем проверяется»: сервер против Windows",
+      "status": "verified",
+      "machine": "server",
+      "proof": "functions/verification-matrix/test_verification_matrix.py::the rendered table matches the data",
+      "note": "таблица обязана быть побайтно тем, что рендерит render.py; сам факт «каждый пункт чем-то закрыт» проверяет every sheet item is mapped"
+    },
+    {
+      "item": "А2. Клиент OpenCode: один интерфейс, два транспорта",
+      "status": "verified",
+      "machine": "server",
+      "proof": "functions/opencode-adapter/test_opencode_adapter.py::repeat does not create a second session",
+      "note": "CodingSession и оба транспорта есть; HTTP v2 проверен здесь 14 группами и живой приёмкой. ВЕТКА CLI НЕ ПРОВЕРЕНА НА ЭТОМ ХОСТЕ - opencode в PATH нет, нужен Windows"
+    },
+    {
+      "item": "А1. Слой целевой платформы вместо хардкода Windows-путей",
+      "status": "open",
+      "machine": "server",
+      "why_not": "НЕ РЕАЛИЗОВАНО. Приёмка (1) самой задачи - это grep '[A-Z]:\\' по functions/ и hermes-home/, и он находит 63 места, включая живые: free-rank/rank.py:20-21 всё ещё пишет A:\\OpenDeamon, autonomous_tools/create.py:112 - C:\\Users\\cheli\\... . Проверять нечем, пока модуля платформы нет; после его появления гейтом станет тот же grep"
+    },
+    {
+      "item": "А3. Загрузка ключей по allow-list — одинаково на Windows и на сервере",
+      "status": "open",
+      "machine": "server",
+      "why_not": "НЕ РЕАЛИЗОВАНО. Единого загрузчика нет: allow-list живёт в bootstrap.ps1, сервер читает oc-client.env точечно в адаптере. Гейта «секретов в репозитории нет» тоже нет - reserve проверяет только config.yaml"
+    },
+    {
+      "item": "А6. Поиск: один интерфейс поиска, два провайдера",
+      "status": "open",
+      "machine": "server",
+      "why_not": "НЕ РЕАЛИЗОВАНО. Интерфейса Search(query) в репозитории нет (есть лишь search_skills_hub/search_github в discover.py). Отдельно: старая secret_key SearXNG всё ещё лежит в git - searxng/searxng/settings.yml:17, репозиторий публичный; это пункт приёмки (3) и он не выполнен"
+    },
+    {
+      "item": "А8. Hermes на сервере как исполняемая проверка, а не как документ",
+      "status": "open",
+      "machine": "live-provider",
+      "why_not": "НЕ РЕАЛИЗОВАНО. `which hermes` на сервере даёт rc=1 - Hermes здесь не установлен, поэтому ни doctor, ни mcp test выполнить нечем, а именно они и есть исполняемая проверка"
+    },
+    {
+      "item": "ФАЗА 2-bis. Второй провайдер: Groq + NVIDIA NIM",
+      "status": "open",
+      "machine": "live-provider",
+      "why_not": "фаза не закрыта: живые рельсы NIM не подключены (2-bis.7) и ждут решения владельца"
+    },
+    {
+      "item": "НЕ ЗАКРЫТО — остатки Фазы 2-ter: решения владельца и приёмка",
+      "status": "owner",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "заголовок сам объявляет, что это решения владельца; сервер не может закрыть пункт, который ждёт выбора"
+    },
+    {
+      "item": "2-bis.1 Проверка ключей (сделано)",
+      "status": "open",
+      "machine": "live-provider",
+      "why_not": "разовый живой замер без набора в репозитории: в коде нет теста, который это проверяет; результат живёт только в отчёте"
+    },
+    {
+      "item": "2-bis.2 Переименование ключа (сделано)",
+      "status": "owner",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "файл секретов лежит вне репозитория и принадлежит владельцу; репозиторий может только утверждать, что ключа в нём нет"
+    },
+    {
+      "item": "2-bis.5 NVIDIA NIM: лимиты неизвестны, модель интереснее",
+      "status": "open",
+      "machine": "live-provider",
+      "why_not": "требует живой агентный ход через NIM с ключом; в CI не гоняется и набора в репозитории нет"
+    },
+    {
+      "item": "2-bis.5-bis Лимиты NIM: измерено (2026-09-30)",
+      "status": "open",
+      "machine": "live-provider",
+      "why_not": "измерение от 2026-09-30 воспроизводится только вручную; проверки в коде нет, и это осознанный разрыв - лимиты меняются у провайдера"
+    },
+    {
+      "item": "2-bis.5-ter ВАЖНО: правовой статус free-пути NIM",
+      "status": "owner",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "правовой статус free-пути решает владелец; ни один тест не может ни подтвердить, ни опровергнуть лицензию"
+    },
+    {
+      "item": "2-bis.6 Проверить NIM на агентном ходе, а не на пинге",
+      "status": "open",
+      "machine": "live-provider",
+      "why_not": "не выполнено: пинг не заменён агентным ходом, доказательства в репозитории нет"
+    },
+    {
+      "item": "2-bis.8 OpenAI: закрыть и не возвращаться",
+      "status": "owner",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "OPENAI_API_KEYS мёртв (401) и закрыт проверкой adapter.py и рельсом $0; удалить ключ из файла секретов может только владелец"
     }
   ],
   "sheet_furniture": [
-    "TODO — только то, что ещё НЕ решено",
     "Как читать этот файл",
     "Что обязательно к прочтению перед началом",
     "Главное за один абзац",
@@ -318,27 +432,12 @@
     "СОСТОЯНИЕ ПРОЕКТА — сверено с фактом 2026-10-02",
     "Решения владельца (зафиксированы, не переспрашивать)",
     "0. Контекст и закон",
-    "НЕ ЗАКРЫТО — остатки Фазы 2-ter: решения владельца и приёмка",
     "Найдено при подготовке — изменить подход к слою 5",
     "⚠️ Правила, которые воркер обязан соблюдать (из замеров 2026-09-30)",
     "DoD фазы",
     "Первый вертикальный срез",
-    "ФАЗА 2-bis. Второй провайдер: Groq + NVIDIA NIM",
-    "2-bis.1 Проверка ключей (сделано)",
-    "2-bis.2 Переименование ключа (сделано)",
     "Проверено с сервера 2026-10-04: сеть есть; ключи появились в 12:10",
-    "2-bis.5 NVIDIA NIM: лимиты неизвестны, модель интереснее",
-    "2-bis.5-bis Лимиты NIM: измерено (2026-09-30)",
-    "2-bis.5-ter ВАЖНО: правовой статус free-пути NIM",
-    "2-bis.6 Проверить NIM на агентном ходе, а не на пинге",
-    "2-bis.8 OpenAI: закрыть и не возвращаться",
     "Факты, на которых стоят все задачи (замерено 2026-10-04)",
-    "А1. Слой целевой платформы вместо хардкода Windows-путей",
-    "А2. Клиент OpenCode: один интерфейс, два транспорта",
-    "А3. Загрузка ключей по allow-list — одинаково на Windows и на сервере",
-    "А6. Поиск: один интерфейс поиска, два провайдера",
-    "А7. Матрица «что чем проверяется»: сервер против Windows",
-    "А8. Hermes на сервере как исполняемая проверка, а не как документ",
     "Порядок",
     "Порядок и зависимости",
     "Чего сознательно НЕ делаем",

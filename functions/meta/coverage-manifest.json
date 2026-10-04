@@ -154,8 +154,8 @@
     },
     {
       "path": "functions/verification-matrix/test_verification_matrix.py",
-      "groups": 7,
-      "min_executed": 7,
+      "groups": 9,
+      "min_executed": 9,
       "ci": true,
       "reason": "матрица «что чем проверяется»: ссылки на группы должны существовать, наборы не осиротевают, класс машины честен, а непроверяемое обязано быть названо"
     }

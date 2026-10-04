@@ -23,6 +23,13 @@ MACHINE_RU = {
 }
 
 
+STATUS_RU = {
+    "verified": "проверено",
+    "open": "НЕ РЕАЛИЗОВАНО",
+    "owner": "решает владелец",
+}
+
+
 def load() -> dict:
     with open(MATRIX, encoding="utf-8") as f:
         return json.load(f)
@@ -79,35 +86,54 @@ def render(matrix: dict | None = None) -> str:
     # --- пункты листа ---------------------------------------------------
     add("## Пункты листа: чем закрыт и на какой машине")
     add("")
-    add("| пункт | машина | чем закрыт |")
-    add("|---|---|---|")
+    add("| пункт | состояние | машина | чем закрыт |")
+    add("|---|---|---|---|")
     for it in m["items"]:
         machine = MACHINE_RU.get(it["machine"], it["machine"])
-        proof = it.get("proof")
-        if it.get("owner_required"):
-            closed = "**требует владельца** — " + it["reason"]
-        elif not proof:
+        status = it.get("status") or ("owner" if it.get("owner_required")
+                                      else "verified")
+        closed = it.get("proof")
+        if status == "owner":
+            closed = "**требует владельца** — " + str(it.get("reason") or "")
+        elif status == "open":
+            closed = "**чем не закрыт** — " + str(it.get("why_not") or "")
+        elif not closed:
             # Дыра рендерится, а не роняет рендерер: показать пробел должен
             # тот, кто читает таблицу, иначе о нём узнают только из стектрейса.
             closed = "**ЧЕМ НЕ ЗАКРЯТ** — дыра в матрице"
         else:
-            closed = "`%s`" % proof
+            closed = "`%s`" % closed
             if it.get("note"):
                 closed += " (" + it["note"] + ")"
-        add("| %s | %s | %s |" % (it["item"], machine, closed))
+        add("| %s | %s | %s | %s |"
+            % (it["item"], STATUS_RU.get(status, status), machine, closed))
     add("")
 
-    owner = [it for it in m["items"] if it.get("owner_required")]
-    add("### Пункты без автоматической проверки — их решал владелец")
+    owner = [it for it in m["items"] if it.get("status") == "owner"
+             or it.get("owner_required")]
+    open_items = [it for it in m["items"] if it.get("status") == "open"]
+    add("### Что не закрыто и чем это закрывать нечем")
     add("")
-    if owner:
-        add("Расхождение «пункт есть, а чем закрыть нечем» допускается ровно")
-        add("в этой форме: пункт назван и объяснён, а не спрятан.")
-        add("")
-        for it in owner:
-            add("- **%s** — %s" % (it["item"], it["reason"]))
-    else:
-        add("Пусто: все пункты закрыты проверкой.")
+    add("Расхождение «пункт есть, а чем закрыть нечем» допускается ровно в")
+    add("этой форме: пункт назван и объяснён, а не спрятан. Таких строк")
+    add("%d, и они разведены на два разных случая." % (len(owner)
+                                                         + len(open_items)))
+    add("")
+    add("**Решает владелец** — закрыть кодом или прогоном нельзя:")
+    add("")
+    for it in (owner or [None]):
+        if it is None:
+            add("- _пусто_")
+            continue
+        add("- **%s** — %s" % (it["item"], it.get("reason") or it.get("why_not")))
+    add("")
+    add("**Не реализовано** — задача поставлена, но кода нет, проверять нечем:")
+    add("")
+    for it in (open_items or [None]):
+        if it is None:
+            add("- _пусто_")
+            continue
+        add("- **%s** — %s" % (it["item"], it["why_not"]))
     add("")
 
     # --- сводка ---------------------------------------------------------
@@ -122,8 +148,12 @@ def render(matrix: dict | None = None) -> str:
         if counts.get(key):
             add("| %s | %d |" % (MACHINE_RU.get(key, key), counts[key]))
     add("")
-    add("Пунктов листа: %d, из них требуют владельца: %d, закрыто проверкой: %d."
-        % (len(m["items"]), len(owner), len(m["items"]) - len(owner)))
+    verified = [i for i in m["items"] if i.get("status") == "verified"]
+    add("Пунктов листа: %d: проверено %d, не реализовано %d, решает владелец %d."
+        % (len(m["items"]), len(verified), len(open_items), len(owner)))
+    add("")
+    add("Разница между «не реализовано» и «решает владелец» существенна: первое")
+    add("закрывается кодом и прогоном, второе в принципе не проверяется тестом.")
     add("")
     add("Живая приёмка (настоящие ходы модели, сеть и ключи) в CI не гоняется:")
     add("`python functions/opencode-adapter/acceptance_live.py`,")
