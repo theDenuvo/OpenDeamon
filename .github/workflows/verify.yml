@@ -1,0 +1,57 @@
+name: verify
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    name: portable suites (stdlib only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: install the one non-stdlib dependency
+        run: python -m pip install --quiet "PyYAML==6.0.3"
+
+      - name: portable suites
+        run: |
+          set -uo pipefail
+          fail=0
+          for f in functions/specgate/test_spec_gate.py \
+                   functions/baseline/test_baseline.py \
+                   functions/mechanical/test_mechanical.py \
+                   functions/reviewer/test_reviewer.py \
+                   functions/verdict/test_verdict.py \
+                   functions/workerstate/test_worker_state.py \
+                   functions/quota-watch/test_quota_watch.py \
+                   functions/quota-watch/test_moa_free_rail.py \
+                   functions/delegate-first/test_delegate_first.py \
+                   functions/free-rank/test_vision_gate.py \
+                   functions/mcp-policy/test_mcp_policy.py \
+                   functions/routing-map/test_routing_map.py \
+                   functions/hygiene/test_hygiene.py \
+                   functions/startup/test_startup.py ; do
+            [ -f "$f" ] || { echo "MISSING $f"; fail=1; continue; }
+            if out=$(python "$f" 2>&1); then
+              echo "PASS  $(printf '%-52s' "$f") $(printf '%s' "$out" | grep -c '^pass') groups"
+            else
+              echo "FAIL  $f"
+              printf '%s\n' "$out" | grep -E '^(fail|FAIL|Traceback)' | head -5
+              fail=1
+            fi
+          done
+          exit $fail
