@@ -43,12 +43,16 @@ from __future__ import annotations
 
 import os
 import sys
-from collections import namedtuple
 from pathlib import Path
 
 import yaml  # noqa: E402
 
+# ЗАКОН «ноль проверок — не успех» определён в одном месте; набор только им
+# пользуется. См. functions/meta/zero_checks_law.py.
 _HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE.parent / "meta"))
+import zero_checks_law as law  # noqa: E402
+
 _ROOT = _HERE.parent.parent
 
 
@@ -70,8 +74,8 @@ def find_config() -> Path:
 
 CONFIG = find_config()
 
-# Третий исход: «проверка не выполнялась». Не путать с успехом.
-Skip = namedtuple("Skip", "reason")
+# Третий исход: «проверка не выполнялась». Определён законом, а не здесь.
+Skip = law.Skip
 
 TESTS = []
 
@@ -287,12 +291,12 @@ def main() -> int:
         else:
             print("pass  %s" % label)
     print()
-    ran = len(TESTS) - skipped_n
-    print("groups: %d total, %d passed, %d failed, %d skipped"
-          % (len(TESTS), ran - failed, failed, skipped_n))
-    if failed:
-        return 1
-    return 0
+    passed = len(TESTS) - skipped_n - failed
+    # Код возврата решает закон. Пять групп читают только репозиторий, поэтому
+    # ноль выполненных проверок здесь означает поломку самого набора, а не
+    # пропуск, - и закон вернёт EXIT_SKIP, который workflow трактует по
+    # объявлению в манифесте.
+    return law.finish(len(TESTS), passed, failed, skipped_n)
 
 
 if __name__ == "__main__":

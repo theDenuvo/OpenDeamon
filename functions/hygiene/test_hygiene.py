@@ -23,9 +23,15 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from collections import namedtuple
-
 _HERE = os.path.dirname(os.path.abspath(__file__))
+import os
+import sys
+
+# ЗАКОН «ноль проверок — не успех» определён в одном месте; здесь набор только
+# им пользуется. См. functions/meta/zero_checks_law.py.
+sys.path.insert(0, os.path.join(_HERE, os.pardir, "meta"))
+import zero_checks_law as law
+
 _ROOT = os.path.dirname(os.path.dirname(_HERE))
 # TODO.md - файл планировщика. Править его отсюда нельзя: правка
 # чужого документа замаскировала бы повреждение. Поэтому он
@@ -36,19 +42,15 @@ SKIP_DIRS = {".git", ".worktrees", "node_modules", "__pycache__", "cache",
              "generated", "assets", "_setup_tmp"}
 TESTS = []
 
-# Третий исход наряду с pass и fail.
-#
-# Группа, условие которой на этой машине не выполняется, обязана сказать
-# «проверка не выполнялась», а не «всё хорошо». Иначе «ноль групп» читается
-# как успех: ровно так работали обе дисковые группы ниже - на хосте без
-# диска `B:` они возвращали -1.0 и проходили, не измерив ничего. Плюс
-# `verify.yml` теперь различает skip и pass, поэтому объявленный skip
-# виден в отчёте CI, а не прячется за зелёным.
-Skip = namedtuple("Skip", "reason")
+# Третий исход наряду с pass и fail берётся из закона, а не определяется
+# здесь: см. `zero_checks_law`. Пока закон не существовал, это определение
+# было в каждом наборе отдельно, и потому правило можно было обойти, просто
+# не прочитав чужой вариант.
+Skip = law.Skip
+skipped = law.skipped
 
 
-def skipped(reason):
-    return Skip(reason)
+
 
 
 def test(fn):
@@ -374,14 +376,11 @@ def main() -> int:
         else:
             print("pass  %s" % label)
     print()
-    ran = len(TESTS) - skipped_n
-    # Итог обязан называть все три числа. Строка «all pass» без счётчика
-    # пропущенных групп - это ровно то, что читалось как «проверено всё».
-    print("groups: %d total, %d passed, %d failed, %d skipped"
-          % (len(TESTS), ran - failed, failed, skipped_n))
-    if failed:
-        return 1
-    return 0
+    passed = len(TESTS) - skipped_n - failed
+    # Код возврата и машинночитаемая строка - из закона. Шесть групп читают
+    # только репозиторий, поэтому ноль выполненных здесь означает поломку
+    # самого набора; пропуском это объявляться не может.
+    return law.finish(len(TESTS), passed, failed, skipped_n)
 
 
 if __name__ == "__main__":

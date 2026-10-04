@@ -42,7 +42,12 @@ import shutil
 import subprocess
 import sys
 import time
-from collections import namedtuple
+
+# ЗАКОН «ноль проверок — не успех» определён в одном месте; набор только им
+# пользуется. См. functions/meta/zero_checks_law.py.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                os.pardir, "meta"))
+import zero_checks_law as law
 
 EXE = r"A:\OpenDeamon\desktop\Hermes.exe"
 NAME = "Hermes.lnk"
@@ -58,13 +63,11 @@ def startup_dir():
                         "Start Menu", "Programs", "Startup")
 
 
-# Третий исход наряду с pass и fail: «проверка не выполнялась».
-Skip = namedtuple("Skip", "reason")
+# Третий исход наряду с pass и fail берётся из закона, а не определяется
+# здесь: см. `zero_checks_law.Skip`.
+Skip = law.Skip
+skipped = law.skipped
 TESTS = []
-
-
-def skipped(reason):
-    return Skip(reason)
 
 
 def windows_gap():
@@ -225,14 +228,13 @@ def main() -> int:
         else:
             print("pass  %s" % label)
     print()
-    ran = len(TESTS) - skipped_n
-    # Три числа, а не «all pass»: ноль выполненных групп при коде 0 обязан
-    # быть виден в выводе, иначе зелёная строка означает «проверено всё».
-    print("groups: %d total, %d passed, %d failed, %d skipped"
-          % (len(TESTS), ran - failed, failed, skipped_n))
-    if failed:
-        return 1
-    return 0
+    passed = len(TESTS) - skipped_n - failed
+    # Код возврата решает закон, а не набор: `EXIT_PASS` недостижим при нуле
+    # выполненных проверок. Раньше здесь стояло `return 0`, и набор, не
+    # выполнивший ни одной из четырёх групп, рапортовал успех - ровно то, что
+    # закон запрещает.
+    return law.finish(len(TESTS), passed, failed, skipped_n,
+                      reason=law.windows_gap() or "")
 
 
 if __name__ == "__main__":

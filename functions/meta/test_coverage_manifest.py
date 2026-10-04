@@ -50,6 +50,11 @@ _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent.parent
 MANIFEST = _HERE / "coverage-manifest.json"
 
+# ЗАКОН «ноль проверок — не успех» определён в одном месте; этот набор только
+# им пользуется. См. functions/meta/zero_checks_law.py.
+sys.path.insert(0, str(_HERE))
+import zero_checks_law as law  # noqa: E402
+
 # Имена списков, в которых наборы регистрируют свои группы. Разные наборы
 # описывают группы по-разному: декоратор `@test`, либо кортеж
 # `(label, fn)` в `TESTS`, либо такой же список под локальным именем.
@@ -244,7 +249,14 @@ def test_a_zero_check_run_must_be_declared_not_assumed():
 
     Теперь нулевой порог допустим ТОЛЬКО при явном `allow_zero_checks: true`
     с причиной, и одинаково для `ci:true` и `ci:false`. Причина обязательна:
-    «ноль проверок тут законен, потому что <вот это>»."""
+    «ноль проверок тут законен, потому что <вот это>».
+
+    Закон при этом вынесен в `functions/meta/zero_checks_law.py`, и здесь
+    проверяется только объявление. Сам закон проверяет набор
+    `functions/meta/test_zero_checks_law.py`; вторая копия правила в манифесте
+    разъехалась бы с первой молча."""
+    import zero_checks_law as law
+
     fails = []
     for entry in read_manifest()["suites"]:
         if entry.get("min_executed", 0) != 0:
@@ -258,6 +270,14 @@ def test_a_zero_check_run_must_be_declared_not_assumed():
         elif not str(entry.get("reason") or "").strip():
             fails.append("%s: allow_zero_checks is set with no reason"
                          % entry["path"])
+    # объявленный пропуск обязан быть именно пропуском по закону, то есть
+    # кодом 2, а не «успехом с нулём групп»
+    for path in law.declared_skips():
+        entry = next((e for e in read_manifest()["suites"]
+                      if e["path"] == path), None)
+        if entry is None:
+            fails.append("declared_skips() names %s, which is not in the "
+                         "manifest" % path)
     return fails
 
 
@@ -313,10 +333,14 @@ def reconcile(observed_path: str) -> list[str]:
     Формат observed.tsv (пишет шаг portable suites):
         <path>\t<rc>\t<ran>\t<skipped>
 
-    Проверяются две вещи: покрытие (не потеряно ли) и ЗЕЛЁНОСТЬ БЕЗ
-    ПРОВЕРОК (код 0 при нуле выполненных групп допустим только там, где
-    манифест это объявил).
+    Проверяются две вещи: покрытие (не потеряно ли) и ВЕРДИКТ ПО ЗАКОНУ
+    «ноль проверок — не успех». Вердикт выносит
+    `functions/meta/zero_checks_law.py`, тот же вызов, которым пользуется шаг
+    CI: своя копия условия здесь означала бы второе место для правила, а
+    второе место - это ровно та дыра, которую набор и закрывает.
     """
+    import zero_checks_law as law
+
     fails = []
     manifest = read_manifest()
     observed = {}
@@ -343,11 +367,13 @@ def reconcile(observed_path: str) -> list[str]:
                          "manifest requires (floor %d, %d skipped)"
                          % (path, got["ran"], entry["groups"],
                             entry["min_executed"], got["skipped"]))
-        if got["rc"] == 0 and got["ran"] == 0 \
-                and not entry.get("allow_zero_checks"):
-            fails.append("GREEN WITHOUT CHECKS: %s exited 0 having executed no "
-                         "check at all, and the manifest declares no "
-                         "allow_zero_checks for it" % path)
+        # Вердикт выносит закон, а не этот набор: тот же вызов, которым
+        # пользуется шаг CI. Своя копия условия здесь означала бы ровно то,
+        # что закон запрещает, - правило, написанное дважды.
+        label, why = law.verdict(got["rc"], got["ran"],
+                                 bool(entry.get("allow_zero_checks")))
+        if label == "FAIL":
+            fails.append("LAW: %s: %s" % (path, why))
     for path in sorted(set(observed) - {e["path"] for e in manifest["suites"]}):
         fails.append("%s ran but is not in the manifest" % path)
     return fails
@@ -388,9 +414,10 @@ def main() -> int:
             print("pass  observed run versus manifest")
 
     print()
-    print("groups: %d total, %d passed, %d failed"
-          % (len(TESTS), len(TESTS) - failed, failed))
-    return 1 if failed else 0
+    # Код возврата и машинночитаемая строка - из закона, не отсюда. Раньше
+    # стояло `return 1 if failed else 0`, и набор решал свой исход сам.
+    return law.finish(len(TESTS), len(TESTS) - failed, failed, 0,
+                      reason="coverage cannot shrink silently")
 
 
 if __name__ == "__main__":

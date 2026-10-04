@@ -123,6 +123,12 @@
       "proof": "functions/meta/test_coverage_manifest.py::a zero check run must be declared not assumed"
     },
     {
+      "suite": "functions/meta/test_zero_checks_law.py",
+      "machine": "server",
+      "proves": "закон «ноль проверок — не успех» исполняется: ноль проверок не может дать код 0, объявленный пропуск не роняет сборку, искусственно пустой набор роняет",
+      "proof": "functions/meta/test_zero_checks_law.py::an artificially empty suite fails and a declared skip does not"
+    },
+    {
       "suite": "functions/opencode-adapter/test_opencode_adapter.py",
       "machine": "server",
       "proves": "адаптер кодинга: идемпотентность, отказ без авторизации, рельс $0, порог диска, запрет второго экземпляра",

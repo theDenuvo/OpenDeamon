@@ -32,19 +32,24 @@ jobs:
           set -uo pipefail
           fail=0
 
-          # Наборы, объявленные Windows-only. Их нулевое число выполненных
-          # групп - ожидаемый факт, но он обязан быть НАЗВАН, а не выглядеть
-          # как «все группы прошли». Поэтому список явный: любое другое
-          # свойство ноль выполненных групп валит сборку.
-          declared_skip="functions/startup/test_startup.py"
+          # ЗАКОН «ноль проверок — не успех». Коды и список объявленных пропусков
+          # берутся из functions/meta/zero_checks_law.py, а не из этого файла:
+          # пока список был константой в shell, объявить пропуск значило
+          # отредактировать шаг CI молча. Теперь шаг не знает ни одного имени
+          # набора своим текстом.
+          #
+          #   0 PASS  проверки выполнялись   2 SKIP  проверок не было, пропуск объявлен
+          #   1 FAIL  проверка провалилась  3 ENV   прогон не состоялся, и это НЕ объявлено
+          declared_skip=$(PYTHONPATH=functions/meta \
+            python functions/meta/zero_checks_law.py --declared-skips | tr '\n' ' ')
           summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
           observed="${RUNNER_TEMP:-/tmp}/observed.tsv"
           : > "$observed"
           {
             echo "### verify: portable suites"
             echo
-            echo "| suite | ran | skipped | verdict |"
-            echo "|---|---|---|---|"
+            echo "| suite | rc | ran | skipped | verdict |"
+            echo "|---|---|---|---|---|"
           } >> "$summary"
 
           for f in functions/specgate/test_spec_gate.py \
@@ -63,42 +68,48 @@ jobs:
                    functions/startup/test_startup.py \
                    functions/reserve/test_reserve_not_activated.py \
                    functions/meta/test_coverage_manifest.py \
+                   functions/meta/test_zero_checks_law.py \
                    functions/opencode-adapter/test_opencode_adapter.py \
                    functions/verification-matrix/test_verification_matrix.py ; do
             [ -f "$f" ] || { echo "MISSING $f"; fail=1; continue; }
 
             out=$(python "$f" 2>&1); rc=$?
-            ran=$(printf '%s\n' "$out" | grep -c '^pass' || true)
+            # Числа берём из машинночитаемой строки закона, когда она есть, и
+            # только иначе считаем строки вывода. «VERIFY-RESULT» - контракт,
+            # `^pass` - проза, которую можно испортить правкой формулировки.
+            ran=$(printf '%s\n' "$out" | sed -n 's/^VERIFY-RESULT.*passed_ran=\([0-9]*\).*/\1/p' | head -1)
+            [ -n "$ran" ] || ran=$(printf '%s\n' "$out" | grep -c '^pass' || true)
             skipped=$(printf '%s\n' "$out" | grep -c '^SKIP' || true)
-            # Факт прогона уходит ДАННЫМИ, а не остаётся в выводе: сверка с
-            # манифестом покрытия читает этот файл. Именно она ловит набор,
-            # вычеркнутый из этого списка, - сам список молчит.
+            # Факт прогона уходит ДАННЫМИ: сверка с манифестом читает этот файл.
             printf '%s\t%s\t%s\t%s\n' "$f" "$rc" "$ran" "$skipped" >> "$observed"
 
-            if [ "$rc" -ne 0 ]; then
-              echo "FAIL  $(printf '%-52s' "$f") $(printf '%s' "$out" | grep -E '^[0-9]+/' | head -1)"
-              printf '%s\n' "$out" | grep -E '^(fail|FAIL|Traceback)' | head -5
-              echo "| \`$f\` | $ran | $skipped | **FAIL** |" >> "$summary"
+            declared=0
+            case " $declared_skip " in *" $f "*) declared=1 ;; esac
+
+            # Вердикт спрашивает закон (functions/meta/zero_checks_law.py), а не
+            # решает этот шаг сам. Условие в shell было бы второй копией
+            # правила, а вторая копия правила рано или поздно разъезжается с
+            # первой - и разъехавшаяся молчит.
+            v=$(printf '%s %s %s\n' "$rc" "$ran" "$declared" \
+              | PYTHONPATH=functions/meta python functions/meta/zero_checks_law.py --verdict)
+            vlabel=${v%% *}
+            vwhy=${v#"$vlabel"}
+
+            if [ "$vlabel" = "FAIL" ]; then
+              echo "FAIL  $(printf '%-52s' "$f") rc=$rc, $ran ran: $vwhy"
+              printf '%s\n' "$out" | grep -E '^(FAIL|ENV|Traceback)' | head -5
+              echo "| \`$f\` | $rc | $ran | $skipped | **FAIL** |" >> "$summary"
               fail=1
-            elif [ "$ran" -eq 0 ]; then
-              # Ноль выполненных проверок НИКОГДА не читается как успех.
-              if [ "$skipped" -gt 0 ] && \
-                 printf '%s\n' "$declared_skip" | grep -qxF "$f"; then
-                echo "SKIP  $(printf '%-52s' "$f") $skipped groups skipped (declared Windows-only, 0 checks ran)"
-                printf '%s\n' "$out" | grep -A1 '^SKIP' | head -4
-                echo "| \`$f\` | 0 | $skipped | SKIP (declared) |" >> "$summary"
-              else
-                echo "FAIL  $(printf '%-52s' "$f") 0 groups ran, $skipped skipped - an undeclared empty suite is a broken suite, not a green one"
-                printf '%s\n' "$out" | tail -5
-                echo "| \`$f\` | 0 | $skipped | **FAIL (0 groups)** |" >> "$summary"
-                fail=1
-              fi
+            elif [ "$vlabel" = "SKIP" ]; then
+              echo "SKIP  $(printf '%-52s' "$f") rc=$rc, $skipped groups skipped ($vwhy)"
+              printf '%s\n' "$out" | grep -E '^SKIP|^VERIFY-RESULT' | head -3
+              echo "| \`$f\` | $rc | 0 | $skipped | SKIP (declared) |" >> "$summary"
             else
               note=""
               [ "$skipped" -gt 0 ] && note=" ($skipped skipped)"
               echo "PASS  $(printf '%-52s' "$f") $ran groups$note"
               [ "$skipped" -gt 0 ] && printf '%s\n' "$out" | grep -A1 '^SKIP' | head -4
-              echo "| \`$f\` | $ran | $skipped | pass$note |" >> "$summary"
+              echo "| \`$f\` | 0 | $ran | $skipped | pass$note |" >> "$summary"
             fi
           done
 
