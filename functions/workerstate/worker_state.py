@@ -648,6 +648,33 @@ def is_dirty(res: dict) -> bool:
 # откат (код, не модель)
 # --------------------------------------------------------------------------
 
+def _eol_config_args(worktree: str) -> list:
+    """Настройки переводов строк ИМЕННО того репозитория, который откатывается.
+
+    Откат выполняется с `GIT_DIR` теневого store, а это ДРУГОЙ репозиторий.
+    Без явной передачи `checkout-index` берёт политику переводов строк из
+    конфига store, а не из конфига дерева воркера, и кладёт байты блоба
+    (LF) поверх дерева, которое сам git когда-то собрал в CRLF.
+
+    Итог был ровно такой: слой 3 измерял откат своим eol-терпимым сравнением
+    и объявлял «чисто», а `git status` в откатанном worktree показывал `M`
+    на каждом файле. То есть откат рапортовал успех, оставляя дерево, с
+    которым воркер не может работать, и которое рецензент увидит как
+    изменённое.
+
+    Настройка берётся из рабочего дерева командой без подмены `GIT_DIR`,
+    то есть из того репозитория, чьи правила мы обязаны уважать: обычно
+    это `core.autocrlf` и/или `core.eol`, заданные в самом проекте.
+    """
+    args = []
+    for key in ("core.autocrlf", "core.eol"):
+        rc, out, _ = bl.git(["config", "--get", key], cwd=worktree)
+        value = (out or "").strip()
+        if rc == 0 and value:
+            args += ["-c", "%s=%s" % (key, value)]
+    return args
+
+
 def restore(worktree: str, commit: str, store: str) -> dict:
     """Вернуть worktree к baseline-коммиту. Ни одного вызова LLM.
 
@@ -696,13 +723,18 @@ def restore(worktree: str, commit: str, store: str) -> dict:
         os.remove(index)
     env = {"GIT_DIR": git_dir, "GIT_WORK_TREE": worktree,
            "GIT_INDEX_FILE": index}
+    # Политика переводов строк принадлежит дереву воркера, а не store:
+    # см. `_eol_config_args`. Без этого откат писал LF поверх CRLF-дерева и
+    # оставлял его грязным для git.
+    eol = _eol_config_args(worktree)
 
-    rc, _, err = bl.git(["read-tree", commit], cwd=worktree, env=env)
+    rc, _, err = bl.git(eol + ["read-tree", commit], cwd=worktree, env=env)
     if rc != 0:
         result.update({"reason": REASON_GIT_FAILED,
                        "detail": "read-tree: %s" % err.strip()[:200]})
         return result
-    rc, _, err = bl.git(["checkout-index", "-a", "-f"], cwd=worktree, env=env)
+    rc, _, err = bl.git(eol + ["checkout-index", "-a", "-f"], cwd=worktree,
+                        env=env)
     if rc != 0:
         result.update({"reason": REASON_GIT_FAILED,
                        "detail": "checkout-index: %s" % err.strip()[:200]})

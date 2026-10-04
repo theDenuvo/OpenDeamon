@@ -82,6 +82,17 @@ def make_repo(files: dict | None = None) -> str:
     bl.git(["config", "user.email", "t@opendeamon.local"], cwd=root)
     bl.git(["config", "user.name", "worker state tests"], cwd=root)
     bl.git(["config", "commit.gpgsign", "false"], cwd=root)
+    # `core.autocrlf=true` - В САМОМ репозитории, не в глобальном конфиге.
+    #
+    # Это обычный способ настроить политику переводов строк, и именно он
+    # делает расхождение видимым: `git worktree add` смотрит настройку
+    # этого репозитория и кладёт в worktree CRLF, а теневой store - это
+    # ДРУГОЙ репозиторий, и её он не видит вовсе. Именно это расхождение
+    # и ломало откат: `checkout-index` писал байты блоба (LF) поверх
+    # CRLF-дерева, и после отката `git status` в откатанном worktree
+    # показывал «M» на каждом файле. Фикстура воспроизводит условие честно,
+    # а починка живёт в `worker_state.restore`.
+    bl.git(["config", "core.autocrlf", "true"], cwd=root)
     write_repo(root, files if files is not None else DEFAULT_FILES)
     bl.git(["add", "-A"], cwd=root)
     bl.git(["commit", "--quiet", "-m", "initial"], cwd=root)
@@ -96,43 +107,29 @@ class Fixture:
     между группами, иначе карантин одной группы заблокирует другую."""
 
     # ------------------------------------------------------------------ eol
-    def _force_crlf_checkout(self):
-        """Создать условие «в worktree CRLF, в baseline LF» детерминированно.
+    def _isolate_git_config(self):
+        """Отрезать тест от глобальной настройки git на хосте.
 
-        Две группы ниже проверяют РЕАЛЬНЫЙ инвариант слоя: смена переводов
-        строк не повреждение, но видна в отчёте. Условие для него —
-        расхождение байтов между корнем проекта (оттуда слой 2 снимает
-        хэши, там LF) и worktree (`git worktree add` кладёт CRLF).
+        Конфиг пишется ПУСТЫМ по смыслу: он не задаёт `core.autocrlf` и не
+        задаёт ничего вообще. Задача этого файла - только изоляция, чтобы
+        машина с autocrlf=true (или с чем угодно ещё) не изменила результат
+        теста.
 
-        Раньше это условие приходило САМО из глобальной настройки машины
-        (`core.autocrlf=true` у разработчика в Windows). Последствия:
+        Почему autocrlf задаётся НЕ здесь, а в самом репозитории фикстуры
+        (`make_repo`): расхождение "worktree CRLF против baseline LF" создают
+        ДВА разных репозитория. `git worktree add` смотрит настройку
+        основного, а `checkout-index` во время отката работает с `GIT_DIR`
+        теневого store и берёт настройку уже оттуда.
 
-          * на сервере и на CI условия не было - группы падали;
-          * хуже, на хосте без autocrlf группа `eol` ПРОХОДИЛА, не выполнив
-            ни одного утверждения о переводах строк. Отсутствие условия
-            выдавалось за успех.
-
-        Теперь условие создаётся здесь и одинаково на любой машине.
-
-        Почему через `GIT_CONFIG_GLOBAL`, а не `git config` в репозитории:
-        расхождение создают ДВА разных репозитория. `worktree add` смотрит
-        настройку основного, а `checkout-index` во время отката работает с
-        `GIT_DIR` теневого store (`worker_state.restore`) - и настройка
-        берётся уже из конфига этого store. Настройка только основного
-        репозитория даёт ровно то, что получилось при первой попытке:
-        worktree с CRLF, но `checkout-index` кладёт обратно LF, и
-        `git status` в откатанном дереве показывает «M» на каждом файле -
-        группа «откат восстановил baseline» падает на ложном грязном дереве.
-
-        Изолированный `GIT_CONFIG_GLOBAL` решает обе задачи: он виден и
-        основному репозиторию, и store, и одновременно ИЗОЛИРУЕТ тест от
-        хоста - машина с autocrlf=true не сможет изменить результат.
-        Возвращает функцию отката.
+        Если бы autocrlf лежал в глобальном конфиге, его увидели бы оба, и
+        расхождение настроек - ровно то, из-за которого откат оставляет
+        дерево грязным для git, - просто не воспроизвелось бы. Настройка в
+        репозитории означает, что store её не видит, как в жизни.
         """
         cfg = tempfile.mkdtemp(prefix="workerstate-gitconfig-")
         path = os.path.join(cfg, "gitconfig")
         with open(path, "w", encoding="utf-8") as f:
-            f.write("[core]\n\tautocrlf = true\n")
+            f.write("# deliberately empty: isolation only, no settings\n")
         saved = {k: os.environ.get(k) for k in
                  ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")}
         os.environ["GIT_CONFIG_GLOBAL"] = path
@@ -161,7 +158,7 @@ class Fixture:
         private = tempfile.mkdtemp(prefix="workerstate-private-")
         os.environ["HERMES_BASELINE_PRIVATE_DIR"] = private
         self.private = private
-        self._eol_env = self._force_crlf_checkout()
+        self._eol_env = self._isolate_git_config()
         self.root = make_repo(files)
         self.barrier = bl.create_barrier(self.root, spec_id="S-L3",
                                          isolation=isolation)
@@ -212,6 +209,21 @@ class Fixture:
         # git и должен видеть ту же среду, что и остальная группа.
         cfg, saved = self._eol_env
         self._restore_eol_env(cfg, saved)
+
+
+def _command_of(args) -> list:
+    """argv без ведущих `-c key=value`, то есть сама команда git.
+
+    `restore()` передаёт политику переводов строк через `-c core.autocrlf=...`
+    (см. `_eol_config_args` в worker_state), и подмена git должна бить по
+    существу команды, а не по её позиции в списке аргументов. Без этого
+    подмена перестала бы перехватывать `checkout-index` и группа молча
+    проверяла бы ничего.
+    """
+    out = list(args or [])
+    while out[:1] == ["-c"]:
+        out = out[2:]
+    return out
 
 
 def cli(fixture, args: list) -> subprocess.CompletedProcess:
@@ -487,7 +499,7 @@ def test_rollback_restores_the_baseline():
         # LEDGER слоя 2 снимает хэши с КОРНЯ проекта, где у вызывающих
         # тестов переводы строк LF, а `git worktree add` (тоже слой 2) с
         # `core.autocrlf=true` кладёт в worktree CRLF. Этот `core.autocrlf`
-        # задаёт фикстура (`Fixture._force_crlf_checkout`), поэтому
+        # задаёт фикстура (`Fixture._isolate_git_config`), поэтому
         # расхождение воспроизводится
         # на любом хосте и не зависит от глобальной настройки машины.
         # Из-за этого `baseline.verify(ledger, worktree)` на нетронутом дереве
@@ -539,7 +551,7 @@ def test_line_endings_alone_are_not_worker_damage():
             fails.append("an untouched worktree reads as dirty: %s"
                          % pristine["residue"])
         if not pristine["residue"].get("eol_only"):
-            # Условие теперь создаёт фикстура (`Fixture._force_crlf_checkout` ставит
+            # Условие теперь создаёт фикстура (`Fixture._isolate_git_config` ставит
             # core.autocrlf=true в самом репозитории), поэтому пустой
             # список - это дефект, а не «машина не та».
             fails.append("the fixture produced no CRLF/LF difference, so the "
@@ -615,7 +627,7 @@ def test_a_restore_that_lies_is_not_believed():
         real_git = ws.bl.git
 
         def lying_git(args, cwd=None, env=None):
-            if args[:2] == ["checkout-index", "-a"]:
+            if _command_of(args)[:2] == ["checkout-index", "-a"]:
                 return 0, "", ""          # отчёт об успехе, файлов нет
             return real_git(args, cwd=cwd, env=env)
 
