@@ -79,3 +79,11 @@ hermes-home/cron/*.db
 # model weights and large generated artifacts
 hermes-home/generated/
 A:/generated/
+
+# --- local runtime state, never publish (added 2026-10-03) ---
+# Локальное состояние машины: одобрения хуков с абсолютными путями,
+# рантайм-замки планировщика, тикеры. Секретов не содержит, но показывает
+# структуру машины и меняется от запуска к запуску.
+hermes-home/shell-hooks-allowlist.json
+hermes-home/cron/
+hermes-home/vault/
