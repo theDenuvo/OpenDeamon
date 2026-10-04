@@ -119,6 +119,13 @@
       "ci": true
     },
     {
+      "path": "functions/opencode-adapter/test_opencode_adapter.py",
+      "groups": 14,
+      "min_executed": 14,
+      "ci": true,
+      "reason": "живая приёмка против настоящего opencode v2 вынесена в acceptance_live.py и в CI не идёт: она делает реальные ходы модели. Здесь только то, что обязано быть верным без сети и без моделей - идемпотентность, отказ без авторизации, закон $0, порог диска, health, запрет второго экземпляра"
+    },
+    {
       "path": "functions/meta/test_coverage_manifest.py",
       "groups": 7,
       "min_executed": 7,
