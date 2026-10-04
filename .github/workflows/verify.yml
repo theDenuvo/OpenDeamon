@@ -31,6 +31,20 @@ jobs:
         run: |
           set -uo pipefail
           fail=0
+
+          # Наборы, объявленные Windows-only. Их нулевое число выполненных
+          # групп - ожидаемый факт, но он обязан быть НАЗВАН, а не выглядеть
+          # как «все группы прошли». Поэтому список явный: любое другое
+          # свойство ноль выполненных групп валит сборку.
+          declared_skip="functions/startup/test_startup.py"
+          summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
+          {
+            echo "### verify: portable suites"
+            echo
+            echo "| suite | ran | skipped | verdict |"
+            echo "|---|---|---|---|"
+          } >> "$summary"
+
           for f in functions/specgate/test_spec_gate.py \
                    functions/baseline/test_baseline.py \
                    functions/mechanical/test_mechanical.py \
@@ -47,12 +61,41 @@ jobs:
                    functions/startup/test_startup.py \
                    functions/reserve/test_reserve_not_activated.py ; do
             [ -f "$f" ] || { echo "MISSING $f"; fail=1; continue; }
-            if out=$(python "$f" 2>&1); then
-              echo "PASS  $(printf '%-52s' "$f") $(printf '%s' "$out" | grep -c '^pass') groups"
-            else
-              echo "FAIL  $f"
+
+            out=$(python "$f" 2>&1); rc=$?
+            ran=$(printf '%s\n' "$out" | grep -c '^pass' || true)
+            skipped=$(printf '%s\n' "$out" | grep -c '^SKIP' || true)
+
+            if [ "$rc" -ne 0 ]; then
+              echo "FAIL  $(printf '%-52s' "$f") $(printf '%s' "$out" | grep -E '^[0-9]+/' | head -1)"
               printf '%s\n' "$out" | grep -E '^(fail|FAIL|Traceback)' | head -5
+              echo "| \`$f\` | $ran | $skipped | **FAIL** |" >> "$summary"
               fail=1
+            elif [ "$ran" -eq 0 ]; then
+              # Ноль выполненных проверок НИКОГДА не читается как успех.
+              if [ "$skipped" -gt 0 ] && \
+                 printf '%s\n' "$declared_skip" | grep -qxF "$f"; then
+                echo "SKIP  $(printf '%-52s' "$f") $skipped groups skipped (declared Windows-only, 0 checks ran)"
+                printf '%s\n' "$out" | grep -A1 '^SKIP' | head -4
+                echo "| \`$f\` | 0 | $skipped | SKIP (declared) |" >> "$summary"
+              else
+                echo "FAIL  $(printf '%-52s' "$f") 0 groups ran, $skipped skipped - an undeclared empty suite is a broken suite, not a green one"
+                printf '%s\n' "$out" | tail -5
+                echo "| \`$f\` | 0 | $skipped | **FAIL (0 groups)** |" >> "$summary"
+                fail=1
+              fi
+            else
+              note=""
+              [ "$skipped" -gt 0 ] && note=" ($skipped skipped)"
+              echo "PASS  $(printf '%-52s' "$f") $ran groups$note"
+              [ "$skipped" -gt 0 ] && printf '%s\n' "$out" | grep -A1 '^SKIP' | head -4
+              echo "| \`$f\` | $ran | $skipped | pass$note |" >> "$summary"
             fi
           done
+
+          echo
+          {
+            if [ "$fail" -eq 0 ]; then echo "**result: passing**"
+            else echo "**result: FAILING**"; fi
+          } >> "$summary"
           exit $fail

@@ -95,6 +95,61 @@ class Fixture:
     хранилище (LEDGER, store, состояние слоя 3) не должно делиться
     между группами, иначе карантин одной группы заблокирует другую."""
 
+    # ------------------------------------------------------------------ eol
+    def _force_crlf_checkout(self):
+        """Создать условие «в worktree CRLF, в baseline LF» детерминированно.
+
+        Две группы ниже проверяют РЕАЛЬНЫЙ инвариант слоя: смена переводов
+        строк не повреждение, но видна в отчёте. Условие для него —
+        расхождение байтов между корнем проекта (оттуда слой 2 снимает
+        хэши, там LF) и worktree (`git worktree add` кладёт CRLF).
+
+        Раньше это условие приходило САМО из глобальной настройки машины
+        (`core.autocrlf=true` у разработчика в Windows). Последствия:
+
+          * на сервере и на CI условия не было - группы падали;
+          * хуже, на хосте без autocrlf группа `eol` ПРОХОДИЛА, не выполнив
+            ни одного утверждения о переводах строк. Отсутствие условия
+            выдавалось за успех.
+
+        Теперь условие создаётся здесь и одинаково на любой машине.
+
+        Почему через `GIT_CONFIG_GLOBAL`, а не `git config` в репозитории:
+        расхождение создают ДВА разных репозитория. `worktree add` смотрит
+        настройку основного, а `checkout-index` во время отката работает с
+        `GIT_DIR` теневого store (`worker_state.restore`) - и настройка
+        берётся уже из конфига этого store. Настройка только основного
+        репозитория даёт ровно то, что получилось при первой попытке:
+        worktree с CRLF, но `checkout-index` кладёт обратно LF, и
+        `git status` в откатанном дереве показывает «M» на каждом файле -
+        группа «откат восстановил baseline» падает на ложном грязном дереве.
+
+        Изолированный `GIT_CONFIG_GLOBAL` решает обе задачи: он виден и
+        основному репозиторию, и store, и одновременно ИЗОЛИРУЕТ тест от
+        хоста - машина с autocrlf=true не сможет изменить результат.
+        Возвращает функцию отката.
+        """
+        cfg = tempfile.mkdtemp(prefix="workerstate-gitconfig-")
+        path = os.path.join(cfg, "gitconfig")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("[core]\n\tautocrlf = true\n")
+        saved = {k: os.environ.get(k) for k in
+                 ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")}
+        os.environ["GIT_CONFIG_GLOBAL"] = path
+        # Системный конфиг тоже выключаем: иначе `include.path` оттуда
+        # мог бы вернуть чужие настройки поверх наших.
+        os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
+        return cfg, saved
+
+    @staticmethod
+    def _restore_eol_env(cfg, saved):
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        shutil.rmtree(cfg, ignore_errors=True)
+
     def __init__(self, files: dict | None = None, isolation: bool = True):
         self.home = tempfile.mkdtemp(prefix="workerstate-home-")
         self.old_home = os.environ.get("HERMES_HOME")
@@ -106,6 +161,7 @@ class Fixture:
         private = tempfile.mkdtemp(prefix="workerstate-private-")
         os.environ["HERMES_BASELINE_PRIVATE_DIR"] = private
         self.private = private
+        self._eol_env = self._force_crlf_checkout()
         self.root = make_repo(files)
         self.barrier = bl.create_barrier(self.root, spec_id="S-L3",
                                          isolation=isolation)
@@ -152,6 +208,10 @@ class Fixture:
             os.environ.pop("HERMES_BASELINE_PRIVATE_DIR", None)
         else:
             os.environ["HERMES_BASELINE_PRIVATE_DIR"] = self.old_private
+        # Изолированный gitconfig снимается ПОСЛЕ prune: prune сам вызывает
+        # git и должен видеть ту же среду, что и остальная группа.
+        cfg, saved = self._eol_env
+        self._restore_eol_env(cfg, saved)
 
 
 def cli(fixture, args: list) -> subprocess.CompletedProcess:
@@ -425,9 +485,12 @@ def test_rollback_restores_the_baseline():
         # Сквозной контраст со слоем 2, и он неочевиден.
         #
         # LEDGER слоя 2 снимает хэши с КОРНЯ проекта, где у вызывающих
-        # тестов переводы строк LF, а `git worktree add` (тоже слой 2,
-        # `core.autocrlf=true`) кладёт в worktree CRLF. Поэтому
-        # `baseline.verify(ledger, worktree)` на нетронутом дереве
+        # тестов переводы строк LF, а `git worktree add` (тоже слой 2) с
+        # `core.autocrlf=true` кладёт в worktree CRLF. Этот `core.autocrlf`
+        # задаёт фикстура (`Fixture._force_crlf_checkout`), поэтому
+        # расхождение воспроизводится
+        # на любом хосте и не зависит от глобальной настройки машины.
+        # Из-за этого `baseline.verify(ledger, worktree)` на нетронутом дереве
         # показывает подмену — верную по байтам, ложную по смыслу.
         #
         # Это не дефект слоя 3 и не повод «починить» его тем же
@@ -441,9 +504,12 @@ def test_rollback_restores_the_baseline():
             return fails
         in_worktree = bl.verify(ledger, root)
         if not in_worktree["test_tampering"]:
-            fails.append("this repo has no autocrlf noise, so the cross-layer "
-                         "check proves nothing here; the eol regression "
-                         "group is the one that matters")
+            fails.append("the fixture did not produce the CRLF/LF difference "
+                         "it is supposed to produce, so this group measured "
+                         "nothing: root=%r eol_only=%r modified=%r"
+                         % (DEFAULT_FILES.keys(),
+                            in_worktree.get("eol_only"),
+                            in_worktree.get("modified")))
         elif in_worktree["eol_only"] != in_worktree["modified"]:
             fails.append("expected the difference to be eol-only: %s"
                          % in_worktree["reasons"])
@@ -458,11 +524,11 @@ def test_rollback_restores_the_baseline():
 
 
 def test_line_endings_alone_are_not_worker_damage():
-    """`core.autocrlf=true` (эта машина) кладёт в worktree CRLF, а в
-    теневом store лежит LF. Наивное сравнение объявило бы нетронутое
-    дерево грязным, и каждый заход заканчивался бы ложным
-    FAILED_DIRTY. При этом смена переводов строк остаётся видна —
-    отдельным списком, а не «молча чисто».
+    """`core.autocrlf=true` (его ставит фикстура, а не глобальная настройка
+    машины) кладёт в worktree CRLF, а в теневом store лежит LF. Наивное
+    сравнение объявило бы нетронутое дерево грязным, и каждый заход
+    заканчивался бы ложным FAILED_DIRTY. При этом смена переводов строк
+    остаётся видна — отдельным списком, а не «молча чисто».
 
     Настоящую подмену содержимого это не ослабляет: тест ниже
     переписывает ассерт, и он ловится."""
@@ -473,11 +539,12 @@ def test_line_endings_alone_are_not_worker_damage():
             fails.append("an untouched worktree reads as dirty: %s"
                          % pristine["residue"])
         if not pristine["residue"].get("eol_only"):
-            # На машине без autocrlf список будет пустым — это не
-            # поломка теста, а отсутствие повода для него.
-            fails.append("expected CRLF/LF noise from autocrlf; if this repo "
-                         "really has core.autocrlf=false, the eol regression "
-                         "check below is the one that matters")
+            # Условие теперь создаёт фикстура (`Fixture._force_crlf_checkout` ставит
+            # core.autocrlf=true в самом репозитории), поэтому пустой
+            # список - это дефект, а не «машина не та».
+            fails.append("the fixture produced no CRLF/LF difference, so the "
+                         "eol invariant was not exercised at all: %s"
+                         % (pristine["residue"].get("eol_only"),))
 
         # Настоящая правка при сохранении длины — обязана ловиться.
         began = ws.start(fx.barrier, fx.state)
@@ -1134,11 +1201,39 @@ def test_state_machine_issues_no_verdict():
 
 def test_worker_claim_is_kept_separate_and_labelled():
     """§7: `WORKER_CLAIM` — с наименьшим доверием. Смешанный с фактами,
-    он становится частью доказательства, которой не является."""
+    он становится частью доказательства, которой не является.
+
+    Вывод воркера берётся из фикстуры (`ws.attempt_model`), а не из живого
+    `opencode` в PATH. Причина не в скорости: `opencode` есть только на
+    машине разработчика, и без него `_tail("")` даёт пустую строку, `render`
+    не печатает строку claim вовсе — и группа падала, ничего не проверяя.
+    То есть проверка метки зависела от того, установлен ли сторонний CLI.
+
+    Фикстура использует тот же шов, что и группа полного цикла ниже
+    (`ws.attempt_model` подменяется и восстанавливается), поэтому проверка
+    остаётся настоящей: claim непустой, попадает в отчёт, помечен
+    «low trust, not a verdict» и не превращается в вердикт слоя 4.
+    """
     fails = []
+    worker_says = "I fixed it, trust me\ntests pass, I checked"
+    original = ws.attempt_model
+
+    def fixture_worker(model, task, timeout=None):
+        return {"model": model, "launched": True, "exit_code": 0,
+                "timed_out": False, "seconds": 0.01, "stdout": worker_says,
+                "stderr": "", "claim": ws._tail(worker_says), "ok": True,
+                "reason": ws.REASON_WORKER_OK}
+
     with Fixture() as fx:
-        began = ws.start(fx.barrier, fx.state)
-        outcome = ws.run_worker("t", models=["opencode/space-bunny-free"])
+        ws.attempt_model = fixture_worker
+        try:
+            began = ws.start(fx.barrier, fx.state)
+            outcome = ws.run_worker("t", models=["opencode/space-bunny-free"])
+        finally:
+            ws.attempt_model = original
+        if not outcome["stdout"]:
+            fails.append("the fixture worker produced no stdout, so the claim "
+                         "under test would be empty by construction")
         state = began["state"]
         state["run"] = {"ok": outcome["ok"], "reason": outcome["reason"],
                         "served_by": outcome["served_by"],
@@ -1151,6 +1246,15 @@ def test_worker_claim_is_kept_separate_and_labelled():
             fails.append("the claim is not marked as low trust in the report")
         if state["run"]["worker_claim"]["trust"] != "low":
             fails.append("claim trust marker missing")
+        # Метка должна быть ИМЕННО про доверие, а не про успех: зелёный текст
+        # воркера не является вердиктом, и отчёт не имеет права этого скрыть.
+        if "not a verdict" not in rendered:
+            fails.append("the claim line does not say it is not a verdict: %s"
+                         % [l for l in rendered.splitlines()
+                            if "worker claim" in l])
+        if "I fixed it" not in rendered:
+            fails.append("the worker's own words are missing from the report: "
+                         "a claim nobody can read is not a separate record")
     return fails
 
 
