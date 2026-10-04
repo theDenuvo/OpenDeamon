@@ -63,7 +63,8 @@ jobs:
                    functions/startup/test_startup.py \
                    functions/reserve/test_reserve_not_activated.py \
                    functions/meta/test_coverage_manifest.py \
-                   functions/opencode-adapter/test_opencode_adapter.py ; do
+                   functions/opencode-adapter/test_opencode_adapter.py \
+                   functions/verification-matrix/test_verification_matrix.py ; do
             [ -f "$f" ] || { echo "MISSING $f"; fail=1; continue; }
 
             out=$(python "$f" 2>&1); rc=$?

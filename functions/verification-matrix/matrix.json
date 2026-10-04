@@ -1,0 +1,348 @@
+{
+  "_comment": [
+    "МАТРИЦА «ЧТО ЧЕМ ПРОВЕРЯЕТСЯ» — данные, а не проза.",
+    "",
+    "Половина листа годами копила пункты «нужен Windows», и каждый раз это",
+    "выяснялось заново. Матрица обязана быть проверяемой, иначе она",
+    "через месяц станет такой же памятью, от которой её делали.",
+    "",
+    "Проверяет её functions/verification-matrix/test_verification_matrix.py:",
+    "каждая ссылка на набор и на группу должна существовать в исходнике,",
+    "каждый набор репозитория должен быть здесь, класс машины должен",
+    "согласовываться с манифестом покрытия, а VERIFICATION.md обязан быть",
+    "побайтно тем, что рендерит render.py. Расхождение любого из этого -",
+    "красный набор.",
+    "",
+    "Классы машин:",
+    "  server          - выполняется на этом Linux-сервере и в CI",
+    "  windows         - нужно Windows (диски, .lnk, WScript, cua-driver)",
+    "  gpu             - нужна локальная GPU и локальные веса",
+    "  live-provider   - нужен живой провайдер, сеть и ключ",
+    "  owner           - закрывается только человеком: решение, ключ, диск",
+    "",
+    "Поле `proof` — либо `путь::группа`, либо команда. Поле `owner_required`",
+    "обязано у любой строки без проверки, и это ровно требование приёмки (3):",
+    "пункт, который нечем закрыть, обязан быть назван, а не спрятан."
+  ],
+  "suites": [
+    {
+      "suite": "functions/specgate/test_spec_gate.py",
+      "machine": "server",
+      "proves": "слой 0: потолок VERIFIED на авто-методах и запрет ручного достижения",
+      "proof": "functions/specgate/test_spec_gate.py::auto methods reach the VERIFIED ceiling"
+    },
+    {
+      "suite": "functions/baseline/test_baseline.py",
+      "machine": "server",
+      "proves": "слой 2: барьер до воркера, отказ на грязном дереве, хэши LEDGER",
+      "proof": "functions/baseline/test_baseline.py::barrier is mandatory before the worker (invariant 7)"
+    },
+    {
+      "suite": "functions/workerstate/test_worker_state.py",
+      "machine": "server",
+      "proves": "слой 3: таблица переходов, карантин, откат, RECOVERY_BLOCKED, метка WORKER_CLAIM",
+      "proof": "functions/workerstate/test_worker_state.py::transition table matches the scheme"
+    },
+    {
+      "suite": "functions/mechanical/test_mechanical.py",
+      "machine": "server",
+      "proves": "слой 1: каждая разновидность отказа имеет предписанную классификацию",
+      "proof": "functions/mechanical/test_mechanical.py::every failure kind has the prescribed action"
+    },
+    {
+      "suite": "functions/reviewer/test_reviewer.py",
+      "machine": "server",
+      "proves": "слой 5: транспорт опрашивается по-настоящему, рецензент читает коммит, а не живое дерево",
+      "proof": "functions/reviewer/test_reviewer.py::empty content is refused even with http 200"
+    },
+    {
+      "suite": "functions/verdict/test_verdict.py",
+      "machine": "server",
+      "proves": "слой 6: FULL требует diff, PARTIAL не хуже, вердикт не выдаётся без доказательств",
+      "proof": "functions/verdict/test_verdict.py::every result carries an action"
+    },
+    {
+      "suite": "functions/verdict/test_seam.py",
+      "machine": "server",
+      "proves": "швы между слоями: mechanical и reviewer отдают валидный json",
+      "proof": "functions/verdict/test_seam.py::mechanical cli emits valid json",
+      "note": "в списке portable-suite не значится, хотя проходит 8/8 здесь; добавление в CI - решение владельца"
+    },
+    {
+      "suite": "functions/delegate-first/test_delegate_first.py",
+      "machine": "server",
+      "proves": "слой 0: кодовые тулзы заблокированы намеренно, хук fail-open",
+      "proof": "functions/delegate-first/test_delegate_first.py::policy cases"
+    },
+    {
+      "suite": "functions/quota-watch/test_quota_watch.py",
+      "machine": "server",
+      "proves": "разбор схемы квот OpenRouter и защита от дрейфа формы",
+      "proof": "functions/quota-watch/test_quota_watch.py::parse live /api/v1/key schema"
+    },
+    {
+      "suite": "functions/quota-watch/test_moa_free_rail.py",
+      "machine": "server",
+      "proves": "интерлок $0 в MoA: ни один платный слот не достижим, пресет выключен",
+      "proof": "functions/quota-watch/test_moa_free_rail.py::the preset is disabled so moa cannot fan out"
+    },
+    {
+      "suite": "functions/free-rank/test_vision_gate.py",
+      "machine": "server",
+      "proves": "роль зрения: доказанно мёртвые на картинке исключены, eligibility чистая функция",
+      "proof": "functions/free-rank/test_vision_gate.py::denied models excluded from vision"
+    },
+    {
+      "suite": "functions/mcp-policy/test_mcp_policy.py",
+      "machine": "server",
+      "proves": "MCP-серверы бесплатны и без credentials",
+      "proof": "functions/mcp-policy/test_mcp_policy.py::forbidden servers are absent"
+    },
+    {
+      "suite": "functions/routing-map/test_routing_map.py",
+      "machine": "server",
+      "proves": "карта маршрутов совпадает с конфигом, ни один платный id не достижим",
+      "proof": "functions/routing-map/test_routing_map.py::conversation goes to the free core and nothing paid"
+    },
+    {
+      "suite": "functions/hygiene/test_hygiene.py",
+      "machine": "server",
+      "proves": "текст проекта валиден UTF-8, замена символов отсутствует, файлы планировщика не правятся молча",
+      "proof": "functions/hygiene/test_hygiene.py::no replacement characters anywhere in the project text"
+    },
+    {
+      "suite": "functions/reserve/test_reserve_not_activated.py",
+      "machine": "server",
+      "proves": "аварийный платный резерв документирован и НЕ активирован",
+      "proof": "functions/reserve/test_reserve_not_activated.py::no paid model id on any active config line"
+    },
+    {
+      "suite": "functions/meta/test_coverage_manifest.py",
+      "machine": "server",
+      "proves": "покрытие не сокращается молча и ни один набор не зеленеет без проверок",
+      "proof": "functions/meta/test_coverage_manifest.py::a zero check run must be declared not assumed"
+    },
+    {
+      "suite": "functions/opencode-adapter/test_opencode_adapter.py",
+      "machine": "server",
+      "proves": "адаптер кодинга: идемпотентность, отказ без авторизации, рельс $0, порог диска, запрет второго экземпляра",
+      "proof": "functions/opencode-adapter/test_opencode_adapter.py::repeat does not create a second session"
+    },
+    {
+      "suite": "functions/startup/test_startup.py",
+      "machine": "windows",
+      "proves": "ярлык Desktop в автозагрузке ведёт на существующий бинарник, мост hands остаётся",
+      "proof": "functions/startup/test_startup.py::startup has a working hermes entry",
+      "note": "на сервере объявляется SKIP: .lnk, WScript.Shell и диск A:\\ не существуют. Четыре группы проверяются только на Windows"
+    },
+    {
+      "suite": "functions/local-vision/test_local_vision.py",
+      "machine": "gpu",
+      "proves": "картинка доходит до модели и ответ совпадает с эталоном",
+      "proof": "functions/local-vision/test_local_vision.py::the answer matches the ground truth",
+      "note": "нужен живой Ollama на 127.0.0.1:11434 с qwen3-vl; офлайн-группа с эталоном PNG выполняется всегда"
+    },
+    {
+      "suite": "functions/verification-matrix/test_verification_matrix.py",
+      "machine": "server",
+      "proves": "сама матрица не врёт: ссылки существуют, наборы не осиротели, класс машины честен, непроверяемое названо",
+      "proof": "functions/verification-matrix/test_verification_matrix.py::every sheet item is mapped"
+    }
+  ],
+  "commands": [
+    {
+      "command": "python functions/free-rank/rank.py",
+      "machine": "live-provider",
+      "proves": "живой каталог :free и собственные пробы моделей",
+      "why_not_a_suite": "нужен живой OpenRouter и около 40 вызовов; в CI не гоняется"
+    },
+    {
+      "command": "python functions/quota-watch/quota_watch.py",
+      "machine": "live-provider",
+      "proves": "живой остаток суточной квоты и spend",
+      "why_not_a_suite": "нужен OPENROUTER_API_KEY"
+    },
+    {
+      "command": "python functions/opencode-adapter/acceptance_live.py",
+      "machine": "live-provider",
+      "proves": "приёмка адаптера кодинга целиком: diff, идемпотентность, автоподъём, уборка, $0",
+      "why_not_a_suite": "делает настоящие ходы модели"
+    },
+    {
+      "command": "hermes doctor",
+      "machine": "live-provider",
+      "proves": "установленный Hermes видит credentials и не раздувает число issues",
+      "why_not_a_suite": "нужен установленный Hermes"
+    },
+    {
+      "command": "hermes mcp test",
+      "machine": "live-provider",
+      "proves": "восемь MCP-серверов соединяются (kiwi отвечает 11-12 с, нужен таймаут 30 с)",
+      "why_not_a_suite": "живое соединение с внешними серверами"
+    },
+    {
+      "command": "python functions/imggen/comfy_gen.py",
+      "machine": "gpu",
+      "proves": "локальная генерация Qwen-Image-2.1 fp8 через ComfyUI",
+      "why_not_a_suite": "нужна GPU и локальные веса"
+    },
+    {
+      "command": "hermes computer-use doctor",
+      "machine": "windows",
+      "proves": "cua-driver 0.28.2, сессия MCP жива, D3D11 доступен",
+      "why_not_a_suite": "Windows и UIAutomation"
+    },
+    {
+      "command": "fsutil hardlink list",
+      "machine": "windows",
+      "proves": "файлы в cache/hf и в ComfyUI — одни и те же, дублирования места нет",
+      "why_not_a_suite": "инструмент Windows"
+    }
+  ],
+  "items": [
+    {
+      "item": "А2-bis. Адаптер OpenCode — не только для тестов, а как 24/7-эндпоинт",
+      "machine": "live-provider",
+      "proof": "python functions/opencode-adapter/acceptance_live.py"
+    },
+    {
+      "item": "А5. Правило «ноль проверок — не успех» как закон репозитория",
+      "machine": "server",
+      "proof": "functions/meta/test_coverage_manifest.py::a zero check run must be declared not assumed"
+    },
+    {
+      "item": "А4. Контракты переносимости: EOL, аргументы, кодировка",
+      "machine": "server",
+      "proof": "functions/workerstate/test_worker_state.py::rollback restores the baseline, re-measured"
+    },
+    {
+      "item": "НЕ ЗАКРЫТО — группа, которая не может упасть (`test_local_vision`)",
+      "machine": "server",
+      "proof": "functions/meta/test_coverage_manifest.py::no group can pass without asserting anything",
+      "note": "обход снят и ловер добавлен; сама группа переписать нельзя без живого Ollama, поэтому она объявлена в манифесте как non_asserting"
+    },
+    {
+      "item": "6.5 Уборка",
+      "machine": "gpu",
+      "proof": "python functions/imggen/comfy_gen.py",
+      "note": "уборка касается локальных весов ComfyUI и qwen3-vl"
+    },
+    {
+      "item": "ФАЗА 6. Локальное зрение — Ollama уже стоит",
+      "machine": "gpu",
+      "proof": "functions/local-vision/test_local_vision.py::the answer matches the ground truth"
+    },
+    {
+      "item": "ФАЗА 3. Один вход — Desktop",
+      "machine": "windows",
+      "proof": "functions/startup/test_startup.py::the real desktop binary exists and is not a lnk"
+    },
+    {
+      "item": "3.2 Раскладка панелей",
+      "machine": "windows",
+      "proof": "hermes computer-use doctor"
+    },
+    {
+      "item": "ФАЗА 8. Саморасширение",
+      "machine": "windows",
+      "proof": "hermes skill install",
+      "note": "живая установка скилла из хаба нужна на машине, где стоит Hermes"
+    },
+    {
+      "item": "8.2 Включить гейты",
+      "machine": "windows",
+      "proof": "hermes doctor",
+      "note": "approval-гейты видны в работающем Hermes, не в репозитории"
+    },
+    {
+      "item": "ФАЗА 10. Уборка и гигиена",
+      "machine": "server",
+      "proof": "functions/hygiene/test_hygiene.py::project text files are valid utf8",
+      "note": "часть пункта про диски C:/A:/B: вынесена отдельной строкой - она не серверная"
+    },
+    {
+      "item": "P1 — потеря данных, рассинхрон, риск для соседних систем",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "пункт объединяет несколько независимых вещей, часть из которых не проверяется кодом вовсе: решения владельца по дискам и по ключам. Строки ниже разбирают его по частям"
+    },
+    {
+      "item": "6. C: — 3.4 ГБ свободно из 110 ГБ",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "только Windows-диски C:/A:, правило владельца «C: не трогать». Настоящая причина - A:\\OpenDeamon\\cache\\hf = 32.95 ГБ; дублирования нет (fsutil hardlink list). Закрывается решением владельца о переносе, а не тестом"
+    },
+    {
+      "item": "⚠️ П1-п.6: диск. Настоящая причина найдена, но не устранена",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "то же, что и в 6. C:, плюс предложение владельцу: порог «загрузка >5 ГБ начинается с проверки свободного места». Порог - политика, а не проверка"
+    },
+    {
+      "item": "⚠️ ТРЕБУЕТ РЕШЕНИЯ — не закрывать фазу, пока не решено",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "по определению требует решения владельца; сервер не может закрыть пункт, который ждёт выбора"
+    },
+    {
+      "item": "2-bis.7 Подключение (не сделано)",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "нужны ключи Groq/NVIDIA в allow-list и решение владельца, какой рельс основной"
+    },
+    {
+      "item": "2-bis.3 Groq: квоты и жёсткое ограничение",
+      "machine": "live-provider",
+      "proof": "hermes doctor",
+      "note": "живой замер квот Groq; сам лимит зафиксирован в config.yaml, его проверяет routing-map"
+    },
+    {
+      "item": "Окружение на сервере: что нужно поставить (задачи воркеру)",
+      "machine": "owner",
+      "owner_required": true,
+      "reason": "установка пакетов на сервер - решение владельца по политике хоста, а не проверка проекта"
+    },
+    {
+      "item": "АРХИТЕКТУРА: задачи на реализацию",
+      "machine": "server",
+      "proof": "functions/verification-matrix/test_verification_matrix.py::every sheet item is mapped",
+      "note": "umbrella для А1…А8; сам факт «каждый пункт чем-то закрыт» проверяется набором"
+    }
+  ],
+  "sheet_furniture": [
+    "TODO — только то, что ещё НЕ решено",
+    "Как читать этот файл",
+    "Что обязательно к прочтению перед началом",
+    "Главное за один абзац",
+    "Три ловушки, на которых уже потеряно время",
+    "СОСТОЯНИЕ ПРОЕКТА — сверено с фактом 2026-10-02",
+    "Решения владельца (зафиксированы, не переспрашивать)",
+    "0. Контекст и закон",
+    "НЕ ЗАКРЫТО — остатки Фазы 2-ter: решения владельца и приёмка",
+    "Найдено при подготовке — изменить подход к слою 5",
+    "⚠️ Правила, которые воркер обязан соблюдать (из замеров 2026-09-30)",
+    "DoD фазы",
+    "Первый вертикальный срез",
+    "ФАЗА 2-bis. Второй провайдер: Groq + NVIDIA NIM",
+    "2-bis.1 Проверка ключей (сделано)",
+    "2-bis.2 Переименование ключа (сделано)",
+    "Проверено с сервера 2026-10-04: сеть есть; ключи появились в 12:10",
+    "2-bis.5 NVIDIA NIM: лимиты неизвестны, модель интереснее",
+    "2-bis.5-bis Лимиты NIM: измерено (2026-09-30)",
+    "2-bis.5-ter ВАЖНО: правовой статус free-пути NIM",
+    "2-bis.6 Проверить NIM на агентном ходе, а не на пинге",
+    "2-bis.8 OpenAI: закрыть и не возвращаться",
+    "Факты, на которых стоят все задачи (замерено 2026-10-04)",
+    "А1. Слой целевой платформы вместо хардкода Windows-путей",
+    "А2. Клиент OpenCode: один интерфейс, два транспорта",
+    "А3. Загрузка ключей по allow-list — одинаково на Windows и на сервере",
+    "А6. Поиск: один интерфейс поиска, два провайдера",
+    "А7. Матрица «что чем проверяется»: сервер против Windows",
+    "А8. Hermes на сервере как исполняемая проверка, а не как документ",
+    "Порядок",
+    "Порядок и зависимости",
+    "Чего сознательно НЕ делаем",
+    "Проверка перед сдачей",
+    "ПЛАН РАБОТ: OpenDeamon → «одно окно, один контекст, $0»"
+  ]
+}
