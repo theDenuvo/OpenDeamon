@@ -1,0 +1,135 @@
+{
+  "_comment": [
+    "Манифест покрытия CI. Это ДАННЫЕ, а не константа в shell: правка этого",
+    "файла - обычное ревью в git, тогда как правка списка запуска внутри",
+    "verify.yml выглядит безобидной частью шага и проходит незамеченной.",
+    "",
+    "Поля набора:",
+    "  path          - путь к набору относительно корня репозитория",
+    "  groups        - сколько групп набор ОБЪЯВЛЯЕТ (сверяется с исходником",
+    "                  разбором AST, см. functions/meta/test_coverage_manifest.py)",
+    "  min_executed  - нижний порог для CI: столько групп набор обязан",
+    "                  выполнить на ubuntu-latest",
+    "  ci            - true: набор обязан быть в списке запуска и выполнять",
+    "                  не меньше min_executed групп. false: набор по природе",
+    "                  локальный, причина обязана быть записана здесь",
+    "  reason        - для ci:false - почему набор не в CI"
+  ],
+  "suites": [
+    {
+      "path": "functions/specgate/test_spec_gate.py",
+      "groups": 32,
+      "min_executed": 32,
+      "ci": true
+    },
+    {
+      "path": "functions/baseline/test_baseline.py",
+      "groups": 35,
+      "min_executed": 34,
+      "ci": true,
+      "reason": "одна группа пропускает на не-Windows (ветка пути), остальные 34 обязаны выполняться"
+    },
+    {
+      "path": "functions/mechanical/test_mechanical.py",
+      "groups": 23,
+      "min_executed": 23,
+      "ci": true
+    },
+    {
+      "path": "functions/reviewer/test_reviewer.py",
+      "groups": 22,
+      "min_executed": 22,
+      "ci": true
+    },
+    {
+      "path": "functions/verdict/test_verdict.py",
+      "groups": 19,
+      "min_executed": 19,
+      "ci": true
+    },
+    {
+      "path": "functions/workerstate/test_worker_state.py",
+      "groups": 41,
+      "min_executed": 41,
+      "ci": true
+    },
+    {
+      "path": "functions/quota-watch/test_quota_watch.py",
+      "groups": 10,
+      "min_executed": 10,
+      "ci": true
+    },
+    {
+      "path": "functions/quota-watch/test_moa_free_rail.py",
+      "groups": 7,
+      "min_executed": 5,
+      "ci": true,
+      "reason": "две группы читают исходники установленного Hermes и объявляют SKIP вне Windows"
+    },
+    {
+      "path": "functions/delegate-first/test_delegate_first.py",
+      "groups": 3,
+      "min_executed": 3,
+      "ci": true
+    },
+    {
+      "path": "functions/free-rank/test_vision_gate.py",
+      "groups": 8,
+      "min_executed": 8,
+      "ci": true
+    },
+    {
+      "path": "functions/mcp-policy/test_mcp_policy.py",
+      "groups": 5,
+      "min_executed": 5,
+      "ci": true
+    },
+    {
+      "path": "functions/routing-map/test_routing_map.py",
+      "groups": 9,
+      "min_executed": 9,
+      "ci": true
+    },
+    {
+      "path": "functions/hygiene/test_hygiene.py",
+      "groups": 7,
+      "min_executed": 6,
+      "ci": true,
+      "reason": "писателя memory-store нет на ubuntu, одна группа объявляет SKIP"
+    },
+    {
+      "path": "functions/startup/test_startup.py",
+      "groups": 4,
+      "min_executed": 0,
+      "ci": true,
+      "reason": "Windows-only: ярлык .lnk через WScript.Shell, exe на A:\\, живой процесс с окном. Объявлен в declared_skip и обязан печатать 4 SKIP с причиной"
+    },
+    {
+      "path": "functions/reserve/test_reserve_not_activated.py",
+      "groups": 7,
+      "min_executed": 7,
+      "ci": true
+    },
+    {
+      "path": "functions/meta/test_coverage_manifest.py",
+      "groups": 6,
+      "min_executed": 6,
+      "ci": true,
+      "reason": "набор, который проверяет сам манифест; вычеркнуть его из списка запуска нельзя молча"
+    },
+    {
+      "path": "functions/local-vision/test_local_vision.py",
+      "groups": 5,
+      "min_executed": 0,
+      "ci": false,
+      "reason": "нужен живой Ollama на 127.0.0.1:11434; сам набор печатает SKIP и код 0, поэтому в CI он дал бы 0 выполненных групп"
+    },
+    {
+      "path": "functions/verdict/test_seam.py",
+      "groups": 8,
+      "min_executed": 0,
+      "ci": false,
+      "reason": "в списке portable-suite не значится. Локально проходит 8/8 на том же интерпретаторе, то есть его можно добавить - решение владельца, зафиксировано здесь, чтобы пропуск был виден, а не молчаливый"
+    }
+  ]
+}

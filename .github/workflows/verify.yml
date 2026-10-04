@@ -38,6 +38,8 @@ jobs:
           # свойство ноль выполненных групп валит сборку.
           declared_skip="functions/startup/test_startup.py"
           summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
+          observed="${RUNNER_TEMP:-/tmp}/observed.tsv"
+          : > "$observed"
           {
             echo "### verify: portable suites"
             echo
@@ -59,12 +61,17 @@ jobs:
                    functions/routing-map/test_routing_map.py \
                    functions/hygiene/test_hygiene.py \
                    functions/startup/test_startup.py \
-                   functions/reserve/test_reserve_not_activated.py ; do
+                   functions/reserve/test_reserve_not_activated.py \
+                   functions/meta/test_coverage_manifest.py ; do
             [ -f "$f" ] || { echo "MISSING $f"; fail=1; continue; }
 
             out=$(python "$f" 2>&1); rc=$?
             ran=$(printf '%s\n' "$out" | grep -c '^pass' || true)
             skipped=$(printf '%s\n' "$out" | grep -c '^SKIP' || true)
+            # Факт прогона уходит ДАННЫМИ, а не остаётся в выводе: сверка с
+            # манифестом покрытия читает этот файл. Именно она ловит набор,
+            # вычеркнутый из этого списка, - сам список молчит.
+            printf '%s\t%s\t%s\t%s\n' "$f" "$rc" "$ran" "$skipped" >> "$observed"
 
             if [ "$rc" -ne 0 ]; then
               echo "FAIL  $(printf '%-52s' "$f") $(printf '%s' "$out" | grep -E '^[0-9]+/' | head -1)"
@@ -95,7 +102,25 @@ jobs:
 
           echo
           {
-            if [ "$fail" -eq 0 ]; then echo "**result: passing**"
-            else echo "**result: FAILING**"; fi
+            if [ "$fail" -eq 0 ]; then echo "**portable suites: passing**"
+            else echo "**portable suites: FAILING**"; fi
           } >> "$summary"
           exit $fail
+
+      - name: coverage reconciliation
+        if: always()
+        run: |
+          set -uo pipefail
+          # Список запуска можно сократить, и сам шаг этого не заметит: набор,
+          # которого нет в списке, просто не выполняется, а сборка остаётся
+          # зелёной. Проверено до правки: список из трёх наборов давал exit=0,
+          # и тот же список без workerstate (41 группа) давал тот же exit=0.
+          #
+          # Сверка с манифестом требует, чтобы каждый объявленный набор
+          # выполнил не меньше ожидаемого числа групп. Политика лежит в данных
+          # (functions/meta/coverage-manifest.json), поэтому «подвинуть порог»
+          # - это правка данных в git, а не безобидная правка константы в
+          # этом файле. `if: always()` - сверка обязана отработать и тогда,
+          # когда прогоны уже упали: иначе падение маскирует регресс покрытия.
+          python functions/meta/test_coverage_manifest.py \
+            --reconcile "${RUNNER_TEMP:-/tmp}/observed.tsv"
