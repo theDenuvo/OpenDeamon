@@ -141,7 +141,7 @@
     },
     {
       "path": "functions/meta/test_coverage_manifest.py",
-      "groups": 7,
+      "groups": 8,
       "min_executed": 7,
       "ci": true,
       "reason": "набор, который проверяет сам манифест; вычеркнуть его из списка запуска нельзя молча"

@@ -302,6 +302,95 @@ def test_ci_floor_never_exceeds_the_declared_groups():
 
 
 @test
+def test_the_suite_loop_outlives_a_non_zero_suite_exit_code():
+    """Цикл наборов обязан дойти до конца, каким бы ни был код набора.
+
+    ДЫРА, которую закрывает эта проверка, стоила двух красных прогонов подряд
+    (runs #26 и #28), и оба раза вторая причина указывала не туда.
+
+    GitHub запускает тело `run:` как `bash -e {0}`: errexit уже включён, а
+    `set -uo pipefail` его не выключает - он лишь добавляет pipefail и nounset.
+    Дальше в шаге есть строка
+
+        out=$(python "$f" 2>&1); rc=$?
+
+    которая честно СОБИРАЕТ код возврата набора, чтобы шаг сам решил, что с ним
+    делать. Под errexit первая же команда, вернувшая не ноль, убивает весь шаг
+    вместе с циклом.
+
+    Виновником оказался `functions/startup/test_startup.py`: он возвращает 2 -
+    объявленный пропуск «нулевой прогон это не успех», который закон требует на
+    любой не-Windows машине. Шаг умирал на нём с exit code 2, имея 13 фактов из
+    20, а следующий шаг сверки честно сообщал про семь наборов «did not run at
+    all» - и краснел уже с exit code 1. То есть на странице прогона было два
+    красных сигнала, и оба указывали не на причину.
+
+    Проверяются три свойства, каждое из которых само по себе достаточно, чтобы
+    шаг снова стал молчащим:
+
+    1. `shell: bash` объявлен явно - иначе поведение шага зависит от умолчания
+       раннера, и сегодняшняя правильность не закреплена ничем.
+    2. errexit выключен ДО цикла. `set +e` после начала цикла не защищает.
+    3. Цикл действительно собирает код возврата (`rc=$?`). Это страшнее
+       отсутствия `set +e`: если бы строка выглядела как
+       `out=$(python "$f" 2>&1)` без `; rc=$?`, то при `set +e` падающий набор
+       получил бы `rc=0` и был бы назван PASS - зелёный без единой проверки,
+       то есть ровно то, что запрещает закон «ноль проверок не успех»."""
+    import re
+    import yaml
+
+    fails = []
+    path = _ROOT / ".github" / "workflows" / "verify.yml"
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        return ["verify.yml does not parse: %s" % exc]
+    step = None
+    for job in (doc.get("jobs") or {}).values():
+        for candidate in (job.get("steps") or []):
+            if candidate.get("name") == "portable suites":
+                step = candidate
+                break
+    if step is None:
+        return ["verify.yml has no step named 'portable suites' - the step "
+                "that collects every suite's verdict is gone"]
+
+    if step.get("shell") != "bash":
+        fails.append("the 'portable suites' step declares shell=%r, so how the "
+                     "body is run depends on a runner default; declare "
+                     "shell: bash explicitly" % step.get("shell"))
+
+    run = step.get("run") or ""
+    loop = re.search(r"^[ \t]*for f in ", run, re.M)
+    if not loop:
+        fails.append("the 'portable suites' step no longer loops over a suite "
+                     "list, so nothing collects per-suite verdicts")
+    off = re.search(r"^[ \t]*set \+e\b", run, re.M)
+    if not off:
+        fails.append("the 'portable suites' step does not disable errexit. "
+                     "GitHub runs a run: body as `bash -e {0}`, so the first "
+                     "suite returning non-zero (startup returns 2 by law on "
+                     "every non-Windows machine) kills the whole step with a "
+                     "partial observed.tsv, and reconciliation then blames "
+                     "every suite that never got to run. Write `set +e` "
+                     "before the loop.")
+    elif loop and off.start() > loop.start():
+        fails.append("`set +e` stands AFTER the suite loop, so errexit is "
+                     "still live while the loop runs and a non-zero suite "
+                     "ends the step before the rest is measured")
+
+    if not re.search(r'out=\$\(\s*python\s+"\$f".*?\)\s*;\s*rc=\$\?', run):
+        fails.append("the loop does not collect the suite's exit code "
+                     "(`out=$(python \"$f\" 2>&1); rc=$?`). Without `rc=$?` a "
+                     "failing suite looks like rc=0 and is reported PASS - a "
+                     "green run that checked nothing and failed something")
+
+    # и сверка обязана читать факты прогона, а не считать их отсутствие
+    # покрытием
+    return fails
+
+
+@test
 def test_the_ci_suite_list_matches_the_manifest():
     """Список запуска в verify.yml обязан совпадать с манифестом.
 
