@@ -42,8 +42,10 @@ docker на сервере нет, поэтому поиск не был нас�
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -70,7 +72,39 @@ TESTS = []
 # Прежний ключ, который лежал в git. Назван здесь намеренно: проверка
 # «его больше нет» обязана знать, что именно искать, иначе она ищет
 # абстрактное «какой-то секрет» и ничего не находит.
-OLD_SECRET = "c912b1592a38b55c48a1da3b5fdb62bec986a78304dcc0ad7cffa7936c839523"
+# Прежний ключ, который лежал в git, хранится здесь ТОЛЬКО как SHA-256.
+#
+# Так было не всегда: ключ был назван литералом, и проверка «его больше нет»
+# находила его сама в собственном теле - группа искала утечку и падала,
+# находя собственный исходник. Литерал в репозитории, который ищет литерал,
+# это не проверка, а ловушка: она красная всегда и не различает «утечка
+# осталась» с «детектор сам себе мешает».
+#
+# Хэш даёт то же и безопасен: кандидат опознаётся по хэшу, а сам секрет
+# в репозиторий не возвращается.
+OLD_SECRET_SHA256 = "c8d9529a5c98140e977ed1ff6682cffcfc2ea6160e19ffe0953ff5c8d5b47a9e"
+
+# Возможный секрет - непрерывная последовательность hex длиной от 32.
+# Скан идёт по таким последовательностям и сравнивает хэши, поэтому секрет
+# находится одинаково в YAML, в TOML, в строке конфига или рядом с логом.
+_HEX_RUN = re.compile(rb"[0-9a-fA-F]{32,}")
+
+
+def carries_old_secret(blob: bytes) -> bool:
+    """Есть ли в данных прежний ключ - по хэшу, а не по значению."""
+    for match in _HEX_RUN.finditer(blob):
+        token = match.group(0)
+        candidates = [token, token.lower(), token.upper()]
+        # Окно в 64 символа внутри более длинной последовательности: ключ мог
+        # остаться внутри другой строки.
+        if len(token) > 64:
+            lo = token.lower()
+            candidates += [lo[k:k + 64] for k in range(len(lo) - 63)]
+        for cand in candidates:
+            if hashlib.sha256(cand).hexdigest() == OLD_SECRET_SHA256:
+                return True
+    return False
+
 
 SEARXNG_ENDPOINT = search.SEARXNG_URL
 
@@ -354,7 +388,7 @@ def test_the_old_secret_is_gone_and_the_new_one_is_outside_git():
     names = [n for n in tracked.stdout.split("\0") if n]
     settings = _ROOT / "searxng" / "searxng" / "settings.yml"
     text = settings.read_text(encoding="utf-8")
-    if OLD_SECRET in text:
+    if carries_old_secret(text.encode("utf-8")):
         fails.append("the old secret_key is still in settings.yml")
     import re
     for m in re.finditer(r'secret_key:\s*"?([A-Za-z0-9]{32,})"?', text):
@@ -370,7 +404,7 @@ def test_the_old_secret_is_gone_and_the_new_one_is_outside_git():
             body = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if OLD_SECRET in body:
+        if carries_old_secret(body.encode("utf-8", "replace")):
             fails.append("%s contains the old secret" % name)
     # новый секрет обязан лежать вне репозитория
     env = Path("/home/server/projects/opendeamon-runtime/searxng.env")
@@ -379,14 +413,26 @@ def test_the_old_secret_is_gone_and_the_new_one_is_outside_git():
                                 capture_output=True, text=True).stdout
         if "searxng.env" in listed:
             fails.append("the new secret file is tracked by git")
-        if env.read_text(encoding="utf-8").find(OLD_SECRET) >= 0:
+        if carries_old_secret(env.read_bytes()):
             fails.append("the new secret file still holds the OLD secret")
     # предупреждение о истории: старый ключ остаётся в коммитах, и это надо
     # сказать вслух, а не считать задачу выполненной молча
-    if subprocess.run(["git", "log", "-S", OLD_SECRET, "--oneline",
-                       "--", "searxng/searxng/settings.yml"],
-                      cwd=str(_ROOT), capture_output=True,
-                      text=True).stdout.strip():
+    # История: переписывать её - решение владельца (Р4), поэтому здесь только
+    # факт. Ищем прежний ключ по хэшу в версиях файла, которые его трогали,
+    # а не через `git log -S`: -S требует самого литерала.
+    revs = subprocess.run(["git", "log", "--format=%H", "--",
+                           "searxng/searxng/settings.yml"],
+                          cwd=str(_ROOT), capture_output=True,
+                          text=True).stdout.split()
+    stale_in_history = False
+    for rev in revs[:10]:
+        blob = subprocess.run(
+            ["git", "show", "%s:searxng/searxng/settings.yml" % rev],
+            cwd=str(_ROOT), capture_output=True).stdout
+        if carries_old_secret(blob):
+            stale_in_history = True
+            break
+    if stale_in_history:
         sys.stderr.write(
             "NOTE: the old secret_key is still reachable in git history. It is "
             "no longer a live credential (the running instance uses the "
