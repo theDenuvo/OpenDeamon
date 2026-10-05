@@ -213,13 +213,13 @@
   ],
   "items": [
     {
-      "item": "А2-bis. Адаптер OpenCode — не только для тестов, а как 24/7-эндпоинт",
+      "item": "А2-bis. Адаптер OpenCode как 24/7-эндпоинт",
       "machine": "live-provider",
       "proof": "python functions/opencode-adapter/acceptance_live.py",
       "status": "verified"
     },
     {
-      "item": "А5. Правило «ноль проверок — не успех» как закон репозитория",
+      "item": "А5. Закон: ноль проверок — не успех",
       "machine": "server",
       "proof": "functions/meta/test_coverage_manifest.py::a zero check run must be declared not assumed",
       "status": "verified"
@@ -434,6 +434,22 @@
       "machine": "owner",
       "owner_required": true,
       "reason": "OPENAI_API_KEYS мёртв (401) и закрыт проверкой adapter.py и рельсом $0; удалить ключ из файла секретов может только владелец"
+    },
+    {
+      "item": "НЕ ЗАКРЫТО — приёмка А2-bis нестабильна: живой diff то есть, то нет",
+      "machine": "live-provider",
+      "status": "open",
+      "note": "проверка будущая: acceptance_live.py пять зелёных прогонов подряд",
+      "why_not": "НЕ РЕАЛИЗОВАНО. Наблюдалось 4/5, затем 6/6 на неизменном коде. Нужен детектор расхождения: где теряется diff — модель отвечает в чате, или запись не улеглась."
+    },
+    {
+      "item": "НЕ ЗАКРЫТО — живую половину приёмки А6 нечем воспроизвести: SearXNG не установлен",
+      "machine": "owner",
+      "status": "owner",
+      "note": "живая половина была зелёной 11/11, но SearXNG жил в tmpfs и исчез; постоянный экземпляр — решение владельца",
+      "why_not": "НЕ РЕАЛИЗОВАНО. Живая половина была зелёной 11/11, но SearXNG жил в tmpfs и исчез. Постоянный экземпляр — решение владельца; тяжёлая сборка $0-рельс не любит.",
+      "owner_required": true,
+      "reason": "решение владельца: постоянный SearXNG на диске проекта или явная пометка «этот набор проверяется вручную»"
     }
   ],
   "sheet_furniture": [
