@@ -1,0 +1,51 @@
+# Юнит systemd для SearXNG. Живёт в репозитории, а не только в /etc: правка
+# системного файла без следа в git - это ровно тот класс изменений, который
+# потом невозможно объяснить. Устанавливается скриптом
+# functions/search/install_searxng.sh --systemd.
+#
+# Зачем сервис, а не «запустил руками»: /tmp на этой машине - tmpfs, и всё,
+# что запускается оттуда, исчезает после перезагрузки. Постоянная установка
+# обязана и постоянно подниматься, иначе первый же перезапуск возвращает
+# состояние «живая половина приёмки непроверяема».
+#
+# Секрет сюда НЕ вписан: он лежит в /home/server/projects/opendeamon-runtime/
+# searxng.env с правами 600, и лаунчер читает его оттуда. Юнит ни при каких
+# условиях не содержит значения ключа - иначе ключ уехал бы в /etc и в
+# `systemctl cat`.
+#
+# Почему User=server, а не root: процессу не нужны права, а ключ читается из
+# файла, принадлежащего server, поэтому 600 работают.
+#
+# Слушает только петлю (bind_address 127.0.0.1 в settings.yml). Юнит ничего не
+# публикует наружу и не пробрасывает порты: публикация была бы отдельным
+# сознательным решением, и её здесь нет.
+
+[Unit]
+Description=Hermes search: SearXNG on the loopback only
+Documentation=https://docs.searxng.org/admin/settings/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=server
+WorkingDirectory=/home/server/projects/opendeamon-runtime/searxng/src
+EnvironmentFile=-/home/server/projects/opendeamon-runtime/searxng.env
+Environment=SEARXNG_SETTINGS_PATH=/home/server/projects/opendeamon/searxng/searxng/settings.yml
+Environment=SEARXNG_DISABLE_ETC_SETTINGS=1
+ExecStart=/home/server/projects/opendeamon-runtime/searxng/searxng-run.sh
+Restart=on-failure
+RestartSec=5
+
+# Права процессу не нужны. Установка тоже выполнена вне юнита.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/server/projects/opendeamon-runtime/searxng
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
