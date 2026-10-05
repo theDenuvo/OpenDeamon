@@ -99,11 +99,42 @@ chmod 600 "$SECRET_ENV" 2>/dev/null || true
 
 # ── установка ─────────────────────────────────────────────────────────────
 
-if [ -x "$PREFIX/venv/bin/python" ] \
-   && [ -d "$PREFIX/src/.git" ] \
-   && [ "$(git -C "$PREFIX/src" rev-parse HEAD 2>/dev/null || echo none)" = "$SEARXNG_PIN" ]; then
+# Идемпотентность: «уже стоит закреплённый коммит» - это не только git.
+#
+# Первая версия спрашивала `git -C src rev-parse HEAD`, и это ломалось при
+# запуске от root: git отказывается работать в чужом репозитории
+# («dubious ownership»), проверка возвращала неудачей, и скрипт ПЕРЕУСТАНАВЛИВАЛ
+# venv уже от root. То есть запуск от root не просто падал, а оставлял после
+# себя venv, принадлежащий root, и следующий запуск от server его не мог
+# починить.
+#
+# Поэтому носителем версии служит штамп INSTALL_PIN, а git - лишь
+# дополнительная проверка, и она молча пропускается, если git не готов.
+# И второе: если venv нет, а передан --systemd, скрипт требует сначала
+# поставить его владельцем, а не ставит от root.
+have_install() {
+  [ -x "$PREFIX/venv/bin/python" ] || return 1
+  [ -d "$PREFIX/src" ] || return 1
+  [ -f "$PREFIX/INSTALL_PIN" ] || return 1
+  [ "$(cat "$PREFIX/INSTALL_PIN")" = "$SEARXNG_PIN" ] || return 1
+  head="$(git -C "$PREFIX/src" rev-parse HEAD 2>/dev/null || true)"
+  if [ -n "$head" ] && [ "$head" != "$SEARXNG_PIN" ]; then
+    say "внимание: $PREFIX/src на $head, а закреплён $SEARXNG_PIN - переустанавливаю"
+    return 1
+  fi
+  return 0
+}
+
+if have_install; then
   say "уже установлен закреплённый коммит - установка не требуется"
 else
+  if [ "$(id -u)" = 0 ] && [ ! -x "$PREFIX/venv/bin/python" ]; then
+    die "venv нет, а скрипт запущен от root.
+      Ставить надо владельцем, иначе venv станет root-owned и следующий
+      запуск от server его не починит. Сначала (от server):
+        bash functions/search/install_searxng.sh
+      Флаг --systemd можно передать отдельно, уже после установки."
+  fi
   say "ставлю SearXNG $SEARXNG_PIN в $PREFIX"
   mkdir -p "$PREFIX"
   python3 -m venv "$PREFIX/venv" || die "не создался venv"
@@ -132,6 +163,7 @@ else
   "$PREFIX/venv/bin/python" -m pip install --quiet --upgrade pip setuptools wheel
   "$PREFIX/venv/bin/python" -m pip install --quiet -r "$PREFIX/src/requirements.txt"
   "$PREFIX/venv/bin/python" -m pip install --quiet --no-build-isolation -e "$PREFIX/src"
+  printf '%s\n' "$SEARXNG_PIN" > "$PREFIX/INSTALL_PIN"
   say "установлено: $("$PREFIX/venv/bin/python" -c 'import searx;print(searx.__file__)')"
 fi
 

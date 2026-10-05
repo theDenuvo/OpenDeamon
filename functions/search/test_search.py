@@ -46,6 +46,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -563,6 +564,180 @@ def _listening_on(port: int):
 # --------------------------------------------------------------------------
 # 7. живые группы: ровно то, что требует приёмка
 # --------------------------------------------------------------------------
+
+@test
+def test_the_installer_is_reproducible_and_pinned():
+    """Установка описана скриптом в репозитории и закреплена версией.
+
+    Проверяется ТО, ЧТО МОЖНО ПРОВЕРИТЬ ВСЕГДА, в том числе в CI, где SearXNG
+    нет и не будет: скрипт существует, он синтаксически корректен, он закрепляет
+    ТОЧНЫЙ коммит, отказывается ставить в tmpfs и не несёт секрет.
+
+    Почему это проверяется вообще. Живая половина приёмки A6 четыре раза
+    объявляла себя пропуском, потому что SearXNG стоял в `/tmp/opencode/sx-venv`,
+    а `/tmp` здесь tmpfs на 2 ГБ: после перезагрузки установка исчезла, и
+    «проверено» разошлось с «проверяемо завтра». Скрипт в репозитории
+    превращает разовое ручное действие в воспроизводимое.
+
+    Скрепление версией проверяется отдельно от её наличия: «latest» через
+    полгода - это другой продукт в строке, которой раньше не было, и такой
+    поломки не видно до того, как что-то перестанет работать."""
+    import re
+    import subprocess as sp
+    fails = []
+    script = _HERE / "install_searxng.sh"
+    if not script.is_file():
+        return ["functions/search/install_searxng.sh is missing: the durable "
+                "install has to be a committed script, not something an "
+                "operator did once and forgot"]
+    body = script.read_text(encoding="utf-8")
+
+    # синтаксис: установщик, который не парсится, не воспроизводим
+    check = sp.run(["bash", "-n", str(script)], capture_output=True, text=True)
+    if check.returncode != 0:
+        fails.append("install_searxng.sh does not parse: %s"
+                     % check.stderr.strip()[:120])
+
+    # закреплённая версия: ровно один 40-символьный коммит
+    pins = set(re.findall(r'SEARXNG_PIN="([0-9a-f]{40})"', body))
+    if not pins:
+        fails.append("install_searxng.sh pins no exact commit - a branch or a "
+                     "tag means a different product the day after the install")
+    elif len(pins) > 1:
+        fails.append("install_searxng.sh pins %d different commits: %s"
+                     % (len(pins), sorted(pins)))
+    # и он не «последний»: ветка или тег в закреплении не годятся
+    for loose in ("SEARXNG_PIN=\"master\"", "SEARXNG_PIN=\"latest\"",
+                  "SEARXNG_PIN=\"main\""):
+        if loose in body:
+            fails.append("%s pins a moving ref" % loose)
+
+    # Дальше проверяется НЕ ТЕКСТ скрипта, а его поведение. Сначала было три
+    # регулярки по исходнику - и обе врали: первая искала `/tmp)` и не нашла
+    # `/tmp|/*)`, а вторая ловила `openssl rand` в тексте ИНСТРУКЦИИ для
+    # оператора и объявляла установщик генерирующим секрет, которого он не
+    # генерирует. Регулярка по исходнику проверяет написание, а здесь важен
+    # поступок.
+    import subprocess as sp
+    import tempfile
+
+    # отказ ставить в tmpfs - тот самый отказ, из-за которого установка нужна
+    with tempfile.TemporaryDirectory(dir="/tmp/opencode") as tmp:
+        got = sp.run(["bash", str(script)], capture_output=True, text=True,
+                     timeout=180,
+                     env=dict(os.environ,
+                              HERMES_SEARXNG_PREFIX=os.path.join(tmp, "p")))
+        if got.returncode == 0:
+            fails.append("install_searxng.sh accepted a prefix under /tmp; the "
+                         "first install went to /tmp and vanished on reboot")
+        elif os.path.exists(os.path.join(tmp, "p", "venv")):
+            fails.append("install_searxng.sh refused a /tmp prefix but created "
+                         "a venv under %s anyway" % tmp)
+        if "tmpfs" not in (got.stderr + got.stdout).lower():
+            fails.append("refusing a tmpfs prefix is not explained: a bare "
+                         "non-zero exit sends the operator looking at disk "
+                         "space instead of at /tmp")
+
+    # отказ работать без готового секрета: молчаливая подстановка заглушки
+    # означала бы сервис, поднятый с ключом, который кто-то ещё знает
+    with tempfile.TemporaryDirectory(
+            dir="/home/server/projects") as scratch:
+        prefix = os.path.join(scratch, "p")
+        got = sp.run(["bash", str(script)], capture_output=True, text=True,
+                     timeout=180,
+                     env=dict(os.environ,
+                              HERMES_SEARXNG_PREFIX=prefix,
+                              HERMES_SEARXNG_SECRET_ENV=os.path.join(
+                                  scratch, "absent.env")))
+        if got.returncode == 0:
+            fails.append("install_searxng.sh proceeded with no secret file; the "
+                         "instance would come up on the placeholder key")
+        if os.path.exists(os.path.join(prefix, "venv")):
+            fails.append("a venv was created even though the secret was "
+                         "absent, so a rejected run left a half-install behind")
+
+    # и всё-таки без ключа в самом скрипте: значение в файле установщика
+    # уехало бы в git вместе с ним
+    if re.search(r'SEARXNG_SECRET=[0-9a-f]{32,}', body):
+        fails.append("install_searxng.sh carries a literal SEARXNG_SECRET")
+
+    # лаунчер и юнит лежат в репозитории, а не только в системе
+    for name in ("searxng.service",):
+        if not (_HERE / name).is_file():
+            fails.append("functions/search/%s is missing: an install that only "
+                         "starts by hand does not survive a reboot" % name)
+    return fails
+
+
+@test
+def test_searxng_is_installed_outside_tmpfs():
+    """Установка есть, она на диске и она переживёт перезагрузку.
+
+    Проверяется то, на чём установка в первый раз и посыпалась: префикс не на
+    tmpfs, рядом лежит закреплённый коммит, а если есть systemd - юнит
+    включён, то есть сервис поднимется сам, без человека.
+
+    Без установки группа объявляется пропуском, а не проходит: на машине без
+    SearXNG утверждать «установка переживает перезагрузку» нельзя."""
+    import re
+    fails = []
+    prefix = Path("/home/server/projects/opendeamon-runtime/searxng")
+    if not prefix.is_dir():
+        return law.skipped("no SearXNG install at %s; run "
+                           "functions/search/install_searxng.sh (this machine "
+                           "has no SearXNG to check)" % prefix)
+
+    fstype = ""
+    try:
+        fstype = sp_fstype(prefix)
+    except Exception:  # noqa: BLE001
+        pass
+    if fstype == "tmpfs":
+        fails.append("the install at %s lives on tmpfs, so it disappears on "
+                     "reboot - that is exactly how the live half of the A6 "
+                     "acceptance became unreproducible" % prefix)
+    if not (prefix / "venv" / "bin" / "python").is_file():
+        fails.append("%s/venv/bin/python is missing: the install is incomplete"
+                     % prefix)
+    launcher = prefix / "searxng-run.sh"
+    if not launcher.is_file():
+        fails.append("%s is missing: there is nothing to start the instance "
+                     "with after a reboot" % launcher)
+    stamp = prefix / "INSTALL_PIN"
+    if not stamp.is_file():
+        fails.append("%s is missing, so the installed version cannot be named "
+                     "and a reinstall cannot be skipped" % stamp)
+    else:
+        # закреплённый коммит обязан совпадать с тем, что в скрипте: иначе
+        # «установлено» и «проверяется» разошлись
+        script = (_HERE / "install_searxng.sh").read_text(encoding="utf-8")
+        pinned = re.search(r'SEARXNG_PIN="([0-9a-f]{40})"', script)
+        if pinned and stamp.read_text().strip() != pinned.group(1):
+            fails.append("installed commit %s differs from the pinned %s - the "
+                         "check and the install describe different things"
+                         % (stamp.read_text().strip(), pinned.group(1)))
+
+    # автозапуск: если systemd есть, сервис должен быть включён, иначе после
+    # перезагрузки живая половина опять невоспроизводима
+    unit = _ROOT / "functions" / "search" / "searxng.service"
+    if unit.is_file() and shutil.which("systemctl"):
+        got = subprocess.run(["systemctl", "is-enabled", "searxng.service"],
+                             capture_output=True, text=True, timeout=30)
+        state = got.stdout.strip()
+        if state not in ("enabled", "enabled-runtime", "static"):
+            fails.append("systemd says searxng.service is %r; without enabling "
+                         "it nothing starts the instance after a reboot"
+                         % (state or got.stderr.strip()[:60]))
+    return fails
+
+
+def sp_fstype(path: Path) -> str:
+    """Тип файловой системы, на которой лежит каталог. Пусто, если не знаем."""
+    import subprocess
+    out = subprocess.run(["stat", "-f", "-c", "%T", str(path)],
+                         capture_output=True, text=True, timeout=30)
+    return out.stdout.strip()
+
 
 @test
 def test_the_documented_curl_returns_results():
