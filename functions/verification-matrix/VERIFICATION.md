@@ -28,6 +28,7 @@
 | `functions/reserve/test_reserve_not_activated.py` | сервер | аварийный платный резерв документирован и НЕ активирован | `functions/reserve/test_reserve_not_activated.py::no paid model id on any active config line` |
 | `functions/meta/test_coverage_manifest.py` | сервер | покрытие не сокращается молча и ни один набор не зеленеет без проверок | `functions/meta/test_coverage_manifest.py::a zero check run must be declared not assumed` |
 | `functions/meta/test_zero_checks_law.py` | сервер | закон «ноль проверок — не успех» исполняется: ноль проверок не может дать код 0, объявленный пропуск не роняет сборку, искусственно пустой набор роняет | `functions/meta/test_zero_checks_law.py::an artificially empty suite fails and a declared skip does not` |
+| `functions/search/test_search.py` | сервер | поиск настроен через один интерфейс с двумя провайдерами: локальный SearXNG и внешний keyless, выбор по наличию эндпоинта; прежний secret_key убран из git, новый вне репозитория; SearXNG слушает только петлю | `functions/search/test_search.py::the interface reproduces the endpoint answer` |
 | `functions/opencode-adapter/test_opencode_adapter.py` | сервер | адаптер кодинга: идемпотентность, отказ без авторизации, рельс $0, порог диска, запрет второго экземпляра | `functions/opencode-adapter/test_opencode_adapter.py::repeat does not create a second session` |
 | `functions/startup/test_startup.py` | Windows | ярлык Desktop в автозагрузке ведёт на существующий бинарник, мост hands остаётся | `functions/startup/test_startup.py::startup has a working hermes entry` |
 | `functions/local-vision/test_local_vision.py` | GPU + веса | картинка доходит до модели и ответ совпадает с эталоном | `functions/local-vision/test_local_vision.py::the answer matches the ground truth` |
@@ -125,7 +126,7 @@
 
 | машина | наборов |
 |---|---|
-| сервер | 19 |
+| сервер | 20 |
 | Windows | 1 |
 | GPU + веса | 1 |
 

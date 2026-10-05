@@ -1,0 +1,43 @@
+# Настройки SearXNG ДЛЯ ЗАПУСКА В КОНТЕЙНЕРЕ.
+#
+# Это подмена основного settings.yml, а не замена ему: причина в том, что
+# внутри контейнера 127.0.0.1 - это петля контейнера, и опубликованный порт
+# до неё не доходит. Наружу порт закрыт самим compose
+# (`ports: 127.0.0.1:8888:8080`).
+#
+# Проверка `functions/search/test_search.py` намеренно читает основной файл
+# `../settings.yml` и требует там именно петлю: это правило для машины, где
+# сервис запускается напрямую. Здесь же - исключение для контейнера, и оно
+# живёт отдельно, чтобы правило не размывалось.
+
+use_default_settings: true
+
+general:
+  instance_name: "Hermes Search"
+  debug: false
+  strict_host_token: true
+
+server:
+  # Секрет приходит из SEARXNG_SECRET (см. docker-compose.yml). Литерала нет:
+  # прежний 64-символьный ключ лежал в git, и репозиторий публичный.
+  secret_key: "unset-provide-SEARXNG_SECRET"
+  # Внутри контейнера - все интерфейсы контейнера. Наружу это не выходит:
+  # compose публикует порт только на петлю хоста.
+  bind_address: "0.0.0.0"
+  port: 8080
+  base_url: "http://localhost:8888/"
+  limiter: false
+  public_instance: false
+
+redis:
+  url: "redis://valkey:6379/0"
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json
+  request_delay: 1.5
+
+ui:
+  default_theme: simple

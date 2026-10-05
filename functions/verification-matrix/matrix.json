@@ -129,6 +129,12 @@
       "proof": "functions/meta/test_zero_checks_law.py::an artificially empty suite fails and a declared skip does not"
     },
     {
+      "suite": "functions/search/test_search.py",
+      "machine": "server",
+      "proves": "поиск настроен через один интерфейс с двумя провайдерами: локальный SearXNG и внешний keyless, выбор по наличию эндпоинта; прежний secret_key убран из git, новый вне репозитория; SearXNG слушает только петлю",
+      "proof": "functions/search/test_search.py::the interface reproduces the endpoint answer"
+    },
+    {
       "suite": "functions/opencode-adapter/test_opencode_adapter.py",
       "machine": "server",
       "proves": "адаптер кодинга: идемпотентность, отказ без авторизации, рельс $0, порог диска, запрет второго экземпляра",

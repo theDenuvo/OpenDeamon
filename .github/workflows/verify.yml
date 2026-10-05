@@ -44,6 +44,9 @@ jobs:
             python functions/meta/zero_checks_law.py --declared-skips | tr '\n' ' ')
           summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
           observed="${RUNNER_TEMP:-/tmp}/observed.tsv"
+          # Метка старта прогона: сверка сверяет свежесть файла наблюдения по
+          # ней, чтобы прогон прошлой ночи нельзя было выдать за сегодняшний.
+          : > "${RUNNER_TEMP:-/tmp}/verify-run-start"
           : > "$observed"
           {
             echo "### verify: portable suites"
@@ -69,6 +72,7 @@ jobs:
                    functions/reserve/test_reserve_not_activated.py \
                    functions/meta/test_coverage_manifest.py \
                    functions/meta/test_zero_checks_law.py \
+                   functions/search/test_search.py \
                    functions/opencode-adapter/test_opencode_adapter.py \
                    functions/verification-matrix/test_verification_matrix.py ; do
             [ -f "$f" ] || { echo "MISSING $f"; fail=1; continue; }
@@ -114,9 +118,24 @@ jobs:
           done
 
           echo
+          # Диагностика, когда логи недоступны: страница прогона на GitHub
+          # показывает аннотацию «exit code N» и молчит, а логи требуют входа
+          # в аккаунт. Полная таблица фактов в summary — единственное место,
+          # где причина видна без входа.
+          {
+            echo
+            echo "### факты прогона (полная таблица)"
+            echo
+            printf '%s\n' "набор | код возврата | выполнено | пропущено"
+            while IFS=$'\t' read -r sf src sran ssk; do
+              [ -n "${sf:-}" ] || continue
+              printf '%s\n' "| \`$sf\` | $src | $sran | $ssk |"
+            done < "$observed"
+          } >> "$summary"
+
           {
             if [ "$fail" -eq 0 ]; then echo "**portable suites: passing**"
-            else echo "**portable suites: FAILING**"; fi
+            else echo "**portable suites: FAILING** — причины в таблице выше и в логе шага"; fi
           } >> "$summary"
           exit $fail
 
@@ -124,6 +143,10 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
+          # Каждый шаг в CI — отдельный шелл, поэтому `summary` из шага наборов
+          # здесь не существует. Объявляем заново, иначе первая же запись в
+          # summary молча уходит в никуда (при `set -u` — с ошибкой).
+          summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
           # Список запуска можно сократить, и сам шаг этого не заметит: набор,
           # которого нет в списке, просто не выполняется, а сборка остаётся
           # зелёной. Проверено до правки: список из трёх наборов давал exit=0,
@@ -135,5 +158,37 @@ jobs:
           # - это правка данных в git, а не безобидная правка константы в
           # этом файле. `if: always()` - сверка обязана отработать и тогда,
           # когда прогоны уже упали: иначе падение маскирует регресс покрытия.
-          python functions/meta/test_coverage_manifest.py \
-            --reconcile "${RUNNER_TEMP:-/tmp}/observed.tsv"
+          # Файл наблюдения — это ЕДИНСТВЕННЫЙ источник фактов о прогоне, и он
+          # может оказаться не тем, о котором думает сверка: шаг выше мог
+          # упасть до его создания, или на машине остался файл прошлого
+          # прогона. Именно это случилось при диагностике прогона #26: на
+          # локальной машине путь был `/tmp/observed.tsv`, а `RUNNER_TEMP`
+          # смотрел в другое место, и сверка честно сообщила «18 наборов не
+          # выполнялись» — про прогон, которого не было.
+          #
+          # Поэтому перед сверкой проверяем: файл существует, он непуст, и он
+          # свежее начала этого прогона. Иначе это ENV («прогона не было»),
+          # а не «покрытие потеряно». Различать эти два состояния обязательно:
+          # первое чинится повтором, второе — отсутствием набора в CI.
+          observed="${RUNNER_TEMP:-/tmp}/observed.tsv"
+          marker="${RUNNER_TEMP:-/tmp}/verify-run-start"
+          if [ ! -f "$observed" ] || [ ! -s "$observed" ]; then
+            echo "NO OBSERVED FILE: the suites step produced no run facts at"
+            echo "\`$observed\` — treating as ENVIRONMENT, not as lost coverage."
+            {
+              echo "| \`$observed\` | — | — | — | **ENV: no run facts** |"
+              echo "**portable suites: no run facts to reconcile**"
+            } >> "$summary"
+            exit 3
+          fi
+          if [ -f "$marker" ] && [ "$observed" -ot "$marker" ]; then
+            echo "STALE OBSERVED FILE: \`$observed\` is older than this run"
+            echo "($marker) — it describes a previous run. Treating as ENVIRONMENT."
+            {
+              echo "| \`$observed\` | — | — | — | **ENV: stale run facts** |"
+              echo "**portable suites: stale run facts, not reconciled**"
+            } >> "$summary"
+            exit 3
+          fi
+
+          python functions/meta/test_coverage_manifest.py --reconcile "$observed"
