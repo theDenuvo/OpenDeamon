@@ -442,6 +442,107 @@ def test_owner_items_are_visible_in_the_table():
     return fails
 
 
+# --------------------------------------------------------------------------
+# 10. граница, за которой перестаёт работать сама автоматика
+# --------------------------------------------------------------------------
+
+# Сколько байт оркестратор оставляет от заголовка, когда ищет пункт сам.
+#
+# Не выдуманное число. `/home/server/opendeamon-automation/orch-loop.sh`
+# перебирает пункты `TOTEST.md` и режет заголовок `cut -c1-80`; `cut -c` в
+# этом окружении считает БАЙТЫ, а кириллица даёт два байта на букву.
+# Заголовок в 56 символов - это 95 байт, его режет на 80-м, и префикс
+# приходит с недостроенным символом. Дальше `mddoc has` не находит пункт, и
+# оркестратор пишет «is not in TOTEST.md» про пункт, который лежит в листе
+# целиком. Заголовок до 80 байт проходит.
+#
+# Только `TOTEST.md`: там префикс выбирает МАШИНА, и сократить его нельзя.
+# В `TODO.md` префикс называет планировщик, а `mddoc has` ищет по НАЧАЛУ
+# строки (`startswith`), поэтому длинный заголовок там безопасен - достаточно
+# назвать короткое начало, например `А3.`. Проверять там нечего.
+HEADING_BYTE_BUDGET = 80
+
+
+@test
+def test_unverified_items_survive_the_machine_byte_budget():
+    """Пункт `TOTEST.md` обязан целиком поместиться в то, чем оркестратор
+    ищет пункт, иначе его невозможно ни закрыть, ни вернуть в ремонт.
+
+    Дефект был неочевидным и стоил суток застоя: гейт красный, пункт лежит в
+    листе, а оркестратор раз за разом пишет, что такого пункта нет. Причина -
+    обрезка по байтам, и она воспроизводится, а не угадывается.
+    """
+    fails = []
+    path = os.path.join(_ROOT, "TOTEST.md")
+    if not os.path.isfile(path):
+        return fails
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"^## (.+?)\s*$", line)
+            if not m:
+                continue
+            head = m.group(1).strip()
+            if head.startswith("<") or head.startswith("!["):
+                continue                     # пример формата, не пункт
+            size = len(head.encode("utf-8"))
+            if size > HEADING_BYTE_BUDGET:
+                fails.append(
+                    "TOTEST.md: heading is %d bytes and the orchestrator keeps "
+                    "only %d, so it can never find this item: %r. Shorten the "
+                    "heading - the machine picks the prefix here, it cannot be "
+                    "abbreviated at lookup time." % (size, HEADING_BYTE_BUDGET,
+                                                     head))
+    return fails
+
+
+@test
+def test_a_sheet_template_is_not_a_list_of_items():
+    """Шаблон листа не должен выдавать себя за пункты, и в лист не должен
+    попадать кусок другого листа.
+
+    `mddoc` делит файл на блоки по markdown-заголовкам; всё до первого
+    заголовка уходит в preamble и пунктом не считается. Заголовок внутри
+    шаблона поэтому становится фантомным пунктом: попадает в `list` и в
+    `count`, и оркестратор по нему честно ждёт проверки того, чего нет. Так в
+    `TODO.md` оказался хвост с «Правила» и «Формат записи» из `TOTEST.md`, а
+    сам `TOTEST.md` остался без своего шаблона.
+
+    Отдельный случай - заголовок ПЕРВОГО уровня, названный по имени ДРУГОГО
+    листа: это вставленный документ, а не раздел. Признак не в уровне: в
+    `TODO.md` есть и `# ПЛАН РАБОТ`, и `# АРХИТЕКТУРА`, и это его собственные
+    разделы.
+    """
+    fails = []
+    titles = set(SHEETS.values())
+    for filename, own_title in SHEETS.items():
+        path = os.path.join(_ROOT, filename)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().split("\n")
+        for i, line in enumerate(lines):
+            if line.startswith("# ") and not line.startswith("## "):
+                title = line[2:].strip()
+                for other in titles:
+                    if other == own_title:
+                        continue
+                    if title.startswith(other):
+                        fails.append(
+                            "%s: line %d is a first-level heading %r named "
+                            "after ANOTHER sheet (%s) - a whole document got "
+                            "pasted in here" % (filename, i + 1, title, other))
+            m = re.match(r"^## (.+?)\s*$", line)
+            if not m:
+                continue
+            head = m.group(1).strip()
+            if head in ("Правила", "Формат записи") or head.endswith("файл создан"):
+                fails.append(
+                    "%s: line %d makes a template section a heading %r - mddoc "
+                    "counts it as an unverified item. Use bold text, not a "
+                    "heading: everything before the first heading is preamble."
+                    % (filename, i + 1, head))
+    return fails
+
 def main() -> int:
     failed = 0
     for label, fn in TESTS:
