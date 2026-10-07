@@ -378,12 +378,44 @@ def test_an_empty_query_is_refused_not_answered_with_nothing():
 # 5-6. секрет и петля
 # --------------------------------------------------------------------------
 
+def _installer_defaults(script_text: str) -> tuple:
+    """Каталог установки и файл секрета - ИЗ УСТАНОВЩИКА, а не из этого набора.
+
+    Раньше оба пути были вбиты здесь: `/home/server/projects/opendeamon-runtime`.
+    На раннере GitHub их нет, проверки молча превращались в «ничего не
+    проверял» - тише, чем падение. Теперь значения читаются из
+    install_searxng.sh, который является их единственным источником, и
+    подменяются переменными окружения так же, как в самом установщике.
+
+    Возвращает `(prefix, secret_env)`; при отсутствии переменных и в скрипте
+    берётся пустая строка, и проверка честно скажет, что путь не задан.
+    """
+    def value(name: str) -> str:
+        m = re.search(r'%s="\$\{(\w+):-([^}]*)\}"' % name, script_text)
+        return m.group(2) if m else ""
+
+    def env(name: str, default: str) -> str:
+        return os.environ.get(name) or default
+
+    body = (_HERE / "install_searxng.sh")
+    text = body.read_text(encoding="utf-8") if body.is_file() else ""
+    return (env("HERMES_SEARXNG_PREFIX", value("PREFIX")),
+            env("HERMES_SEARXNG_SECRET_ENV", value("SECRET_ENV")))
+
+
 @test
-def test_the_old_secret_is_gone_and_the_new_one_is_outside_git():
-    """Секрет не лежит в git. Проверяется на отслеживаемых файлах и на
-    индексе git, а не только в рабочем каталоге: незакоммиченная правка
-    выглядит как «уже исправлено», пока она не в индексе."""
+def test_the_old_secret_is_in_no_tracked_file():
+    """Прежний ключ не остался ни в одном отслеживаемом файле.
+
+    Отдельно от «новый секрет вне репозитория», потому что эти два свойства
+    проверяются на РАЗНЫХ машинах: первое - везде, где есть checkout, второе -
+    только там, где есть установка. Смешанная группа обязана была либо врать на
+    CI («проверила то, чего нет»), либо падать на нём.
+
+    Проверяется по списку `git ls-files`, а не по обходу каталога: незакоммиченная
+    правка выглядит как «уже исправлено», пока её нет в индексе."""
     fails = []
+    import re
     tracked = subprocess.run(["git", "ls-files", "-z"], cwd=str(_ROOT),
                              capture_output=True, text=True, check=True)
     names = [n for n in tracked.stdout.split("\0") if n]
@@ -391,12 +423,10 @@ def test_the_old_secret_is_gone_and_the_new_one_is_outside_git():
     text = settings.read_text(encoding="utf-8")
     if carries_old_secret(text.encode("utf-8")):
         fails.append("the old secret_key is still in settings.yml")
-    import re
     for m in re.finditer(r'secret_key:\s*"?([A-Za-z0-9]{32,})"?', text):
-        if m.group(1) not in ("unset",) and not m.group(1).startswith("unset"):
+        if not m.group(1).startswith("unset"):
             fails.append("settings.yml still carries a literal secret of %d "
                          "chars (%s...)" % (len(m.group(1)), m.group(1)[:6]))
-    # весь отслеживаемый набор файлов
     for name in names:
         path = _ROOT / name
         try:
@@ -407,38 +437,56 @@ def test_the_old_secret_is_gone_and_the_new_one_is_outside_git():
             continue
         if carries_old_secret(body.encode("utf-8", "replace")):
             fails.append("%s contains the old secret" % name)
-    # новый секрет обязан лежать вне репозитория
-    env = Path("/home/server/projects/opendeamon-runtime/searxng.env")
-    if env.exists():
-        listed = subprocess.run(["git", "ls-files"], cwd=str(_ROOT),
-                                capture_output=True, text=True).stdout
-        if "searxng.env" in listed:
-            fails.append("the new secret file is tracked by git")
-        if carries_old_secret(env.read_bytes()):
-            fails.append("the new secret file still holds the OLD secret")
-    # предупреждение о истории: старый ключ остаётся в коммитах, и это надо
-    # сказать вслух, а не считать задачу выполненной молча
-    # История: переписывать её - решение владельца (Р4), поэтому здесь только
-    # факт. Ищем прежний ключ по хэшу в версиях файла, которые его трогали,
-    # а не через `git log -S`: -S требует самого литерала.
+    # Предупреждение о истории: прежний ключ остаётся в коммитах, и это надо
+    # сказать вслух, а не считать задачу выполненной молча. Ищем его по хэшу в
+    # версиях файла, которые его трогали: `git log -S` требует самого литерала.
     revs = subprocess.run(["git", "log", "--format=%H", "--",
                            "searxng/searxng/settings.yml"],
                           cwd=str(_ROOT), capture_output=True,
                           text=True).stdout.split()
-    stale_in_history = False
     for rev in revs[:10]:
         blob = subprocess.run(
             ["git", "show", "%s:searxng/searxng/settings.yml" % rev],
             cwd=str(_ROOT), capture_output=True).stdout
         if carries_old_secret(blob):
-            stale_in_history = True
+            sys.stderr.write(
+                "NOTE: the old secret_key is still reachable in git history. "
+                "It is no longer a live credential (the running instance uses "
+                "the rotated one), so rewriting shared history is a separate "
+                "decision, not something to do unasked.\n")
             break
-    if stale_in_history:
-        sys.stderr.write(
-            "NOTE: the old secret_key is still reachable in git history. It is "
-            "no longer a live credential (the running instance uses the "
-            "rotated one), so rewriting shared history is a separate "
-            "decision, not something to do unasked.\n")
+    return fails
+
+
+@test
+def test_the_new_secret_lives_outside_the_repository():
+    """Новый ключ лежит вне репозитория, не отслеживается и не читается всеми.
+
+    Без установки объявляется ПРОПУСКОМ, а не проходит: на раннере GitHub этого
+    файла нет, и утверждать «новый секрет вне git» там не о чем. Раньше этот
+    случай просто не проверялся, и группа отчитывалась зелёной."""
+    fails = []
+    _prefix, secret_env = _installer_defaults(
+        (_HERE / "install_searxng.sh").read_text(encoding="utf-8")
+        if (_HERE / "install_searxng.sh").is_file() else "")
+    if not secret_env:
+        return law.skipped("install_searxng.sh declares no default secret file, "
+                           "so there is no path to check")
+    env = Path(secret_env)
+    if not env.exists():
+        return law.skipped("no SearXNG install here (%s does not exist), so "
+                           "the new secret's location cannot be checked on "
+                           "this machine" % env)
+    listed = subprocess.run(["git", "ls-files"], cwd=str(_ROOT),
+                            capture_output=True, text=True).stdout
+    if secret_env.split("/")[-1] in listed:
+        fails.append("the new secret file is tracked by git")
+    if carries_old_secret(env.read_bytes()):
+        fails.append("the new secret file still holds the OLD secret")
+    mode = oct(env.stat().st_mode)[-3:]
+    if mode not in ("600", "400"):
+        fails.append("%s is mode %s; a secret file readable by anyone on the "
+                     "host is a leaked secret with extra steps" % (env, mode))
     return fails
 
 
@@ -621,27 +669,43 @@ def test_the_installer_is_reproducible_and_pinned():
     import subprocess as sp
     import tempfile
 
+    # Каталоги для черновых установок берутся ОТ ТЕСТА, а не зашиты.
+    #
+    # Здесь были два пути, прибитых к этой машине: `/tmp/opencode` и
+    # `/home/server/projects`. На раннере GitHub их нет, и группа падала с
+    # FileNotFoundError - то есть ровно там, где она обязана работать. Проверено
+    # на прогоне fbd0832: аннотация CI была `rc=1, выполнено 8` с ПУСТОЙ
+    # причиной, потому что подробность уехала в stderr, а в отчёт ушло одно
+    # число. Теперь каталоги выводятся из того, что реально есть: временный -
+    # из tempfile, «дисковый» - из родителя репозитория.
+    tmp_root = tempfile.gettempdir()
+
     # отказ ставить в tmpfs - тот самый отказ, из-за которого установка нужна
-    with tempfile.TemporaryDirectory(dir="/tmp/opencode") as tmp:
+    with tempfile.TemporaryDirectory(dir=tmp_root) as tmp:
         got = sp.run(["bash", str(script)], capture_output=True, text=True,
                      timeout=180,
                      env=dict(os.environ,
                               HERMES_SEARXNG_PREFIX=os.path.join(tmp, "p")))
         if got.returncode == 0:
-            fails.append("install_searxng.sh accepted a prefix under /tmp; the "
-                         "first install went to /tmp and vanished on reboot")
+            fails.append("install_searxng.sh accepted a prefix under %s; the "
+                         "first install went to a tmpfs and vanished on reboot"
+                         % tmp_root)
         elif os.path.exists(os.path.join(tmp, "p", "venv")):
-            fails.append("install_searxng.sh refused a /tmp prefix but created "
-                         "a venv under %s anyway" % tmp)
+            fails.append("install_searxng.sh refused a %s prefix but created "
+                         "a venv under it anyway" % tmp_root)
         if "tmpfs" not in (got.stderr + got.stdout).lower():
             fails.append("refusing a tmpfs prefix is not explained: a bare "
                          "non-zero exit sends the operator looking at disk "
-                         "space instead of at /tmp")
+                         "space instead of at %s" % tmp_root)
 
     # отказ работать без готового секрета: молчаливая подстановка заглушки
-    # означала бы сервис, поднятый с ключом, который кто-то ещё знает
-    with tempfile.TemporaryDirectory(
-            dir="/home/server/projects") as scratch:
+    # означала бы сервис, поднятый с ключом, который кто-то ещё знает.
+    # Родитель репозитория - «диск» по построению: он есть везде, где есть
+    # checkout, и он не tmpfs на машине разработчика.
+    disk_root = str(_ROOT.parent)
+    if not os.path.isdir(disk_root) or not os.access(disk_root, os.W_OK):
+        disk_root = tmp_root
+    with tempfile.TemporaryDirectory(dir=disk_root) as scratch:
         prefix = os.path.join(scratch, "p")
         got = sp.run(["bash", str(script)], capture_output=True, text=True,
                      timeout=180,
@@ -681,7 +745,16 @@ def test_searxng_is_installed_outside_tmpfs():
     SearXNG утверждать «установка переживает перезагрузку» нельзя."""
     import re
     fails = []
-    prefix = Path("/home/server/projects/opendeamon-runtime/searxng")
+    # Префикс - из установщика (см. _installer_defaults), а не вбитый здесь:
+    # иначе на чужой машине группа объявляла бы пропуск о пути, которого
+    # установщик не использует.
+    prefix_str, _secret_env = _installer_defaults(
+        (_HERE / "install_searxng.sh").read_text(encoding="utf-8")
+        if (_HERE / "install_searxng.sh").is_file() else "")
+    if not prefix_str:
+        return law.skipped("install_searxng.sh declares no default prefix, so "
+                           "there is nothing to look for on disk")
+    prefix = Path(prefix_str)
     if not prefix.is_dir():
         return law.skipped("no SearXNG install at %s; run "
                            "functions/search/install_searxng.sh (this machine "
