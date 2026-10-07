@@ -835,7 +835,13 @@ def test_the_same_query_answers_from_both_sides():
                                     {"q": query, "format": "json"}))
     n_direct = len(direct.get("results") or [])
     time.sleep(2.5)  # уважаем request_delay из settings.yml
-    via = search.Search(query, limit=10, provider="searxng")
+    # Сравнивать САМОЕ СРАВНИМОЕ. Раньше здесь стоял `limit=10` с одной
+    # стороны и полная выдача с другой, и сравнение было бессмысленным:
+    # эндпоинт отдал 28 строк, интерфейс честно вернул 10 из них, и группа
+    # объявляла «теряются строки по дороге». Заведомо ложное утверждение,
+    # которое падало примерно в половине прогонов. Равенство ответов
+    # проверяет предыдущая группа, на захваченном ответе; здесь - живость.
+    via = search.Search(query, limit=max(1, n_direct), provider="searxng")
     if not n_direct:
         fails.append("the endpoint found nothing for %r" % query)
     if not via:
@@ -848,10 +854,11 @@ def test_the_same_query_answers_from_both_sides():
         if not r.title.strip():
             fails.append("result %d has an empty title, so the caller has "
                          "nothing to show" % i)
-    if via and n_direct and len(via) < max(1, n_direct // 2):
-        fails.append("the interface returned %d results while the endpoint "
-                     "returned %d - rows are being lost on the way"
-                     % (len(via), n_direct))
+    if via and n_direct and not (set(r.url for r in via)
+                                 & set(x.get("url") or "" for x in
+                                       (direct.get("results") or []))):
+        fails.append("the interface answered the same query with none of the "
+                     "endpoint's urls: %r" % [r.url for r in via[:3]])
     return fails
 
 

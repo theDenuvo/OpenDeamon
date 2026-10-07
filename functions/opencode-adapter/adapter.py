@@ -55,6 +55,18 @@ DEFAULT_AGENT = "build"
 # нужна постановка в очередь, чтобы задача выполнилась целиком.
 DELIVERY_QUEUE = "queue"
 
+# Исходы сессии, которыми ход ЗАКОНЧИЛСЯ неудачей. Пока ход идёт, поле
+# `session.outcome` пусто, и это, а не отсутствие сообщения, означает «ещё
+# рано» - см. HttpV2Transport.wait_for_turn.
+#
+# Список назван явно, а не «всё, что не succeeded»: неизвестный исход должен
+# считаться неудачей, иначе опечатка в API opencode превратится в тихо
+# проваленный прогон приёмки.
+TERMINAL_FAILURES = frozenset({
+    "failed", "error", "cancelled", "canceled", "aborted", "timeout",
+    "rejected", "refused",
+})
+
 # Единственное допустимое семейство моделей. Закон $0.
 FREE_SUFFIX = "-free"
 FREE_PROVIDER_PREFIX = "opencode/"
@@ -371,19 +383,61 @@ class HttpV2Transport(CodingSession):
     # -- ожидание результата ----------------------------------------------
     def wait_for_turn(self, session_id: str, timeout: int = 900,
                       poll: int = 10) -> dict:
-        """Дождаться хода ассистента.
+        """Дождаться ОКОНЧАНИЯ хода, а не его начала.
 
-        Критерий - появилось сообщение типа `assistant`. Не «diff стал
-        непустым»: задача может быть «объясни, ничего не меняя», и тогда
-        правильный результат - пустой diff при состоявшемся ходе.
+        Раньше критерием было «появилось сообщение типа `assistant`». Это неверно,
+        и стоило приёмке А2-bis одного плавающего прогона из пяти.
+
+        Измерено на живом сервере 05.10 (opencode 2.0.22), прогон за прогоном:
+
+            4.54s  первое сообщение `assistant`, session.outcome = None
+            8.63s  session.outcome = "succeeded", файл на диске изменён
+
+          второй прогон:
+
+            5.93s  первое сообщение `assistant`
+          149.03s  session.execution.succeeded
+
+        То есть между первым сообщением ассистента и концом хода проходило от
+        4 до 143 секунд, а diff снимался в первый момент. Модель к этому времени
+        ещё даже не вызвала инструмент правки.
+
+        Признак конца - `session.outcome`: пока ход идёт, поле пусто, в момент
+        окончания равно `succeeded`/`failed`. Проверено поллингом, без
+        `/api/event`, - сервису не нужно держать поток событий.
+
+        Сообщение `assistant` больше не является условием успеха: оно нужно
+        только для внятной причины провала, когда хода так и не было.
         """
         deadline = time.time() + timeout
+        saw_assistant = False
         while time.time() < deadline:
-            if "assistant" in self.message_types(session_id):
-                return {"ok": True, "reason": "assistant turn observed"}
+            outcome = None
+            try:
+                outcome = (self.session(session_id) or {}).get("outcome")
+            except AdapterError:
+                outcome = None
+            if isinstance(outcome, str) and outcome:
+                if outcome in TERMINAL_FAILURES:
+                    return {"ok": False,
+                            "reason": "the turn ended as %r at opencode; "
+                                      "opencode reports the reason on "
+                                      "/api/event as session.execution.failed"
+                                      % outcome}
+                return {"ok": True,
+                        "reason": "session.outcome=%r" % outcome}
+            if not saw_assistant and "assistant" in self.message_types(session_id):
+                saw_assistant = True
             time.sleep(poll)
-        # Честная причина провала: хода не было. Не выдумываем текст ошибки,
-        # которого в этом API нет - он приходит событием в /api/event.
+        # Честная причина провала, и она различает два случая: ход не начался
+        # и ход начался, но не кончился. Раньше это был один текст на оба, и
+        # он указывал на несуществующую ошибку API.
+        if saw_assistant:
+            return {"ok": False,
+                    "reason": "the assistant started answering but the turn "
+                              "never reached a terminal state within %ds "
+                              "(session.outcome stayed empty); the model may "
+                              "have stalled mid-turn" % timeout}
         return {"ok": False,
                 "reason": "no assistant turn within %ds; opencode reports "
                           "failures on /api/event as session.execution.failed"

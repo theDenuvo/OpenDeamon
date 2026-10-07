@@ -42,6 +42,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from adapter import (AdapterError, AuthRequired, CliTransport,  # noqa: E402
                      DEFAULT_MODEL, CodingSession, Endpoint, HttpV2Transport,
                      Task, load_endpoint)
+from worktree import (describe_empty, diff_worktree,  # noqa: E402
+                      snapshot)
 
 def resolve_state_dir() -> str:
     """Где лежит состояние, и почему именно сюда.
@@ -304,6 +306,11 @@ class QueueRunner:
                     "updated": time.time()})
         self.store.put(digest, job)
 
+        # Снимок ДО постановки задачи: без него «что изменилось» не с чем
+        # сравнивать. Снимается здесь, а не в транспорте, потому что каталог
+        # принадлежит задаче, а не opencode.
+        before = snapshot(task.directory)
+
         self.transport.send(sid, task.text)
         outcome = self.transport.wait_for_turn(sid, self.turn_timeout)
         if not outcome["ok"]:
@@ -313,7 +320,38 @@ class QueueRunner:
             self.transport.delete(sid)
             return
 
-        diff = self.transport.diff(sid)
+        # diff берётся ИЗ РАБОЧЕГО ДЕРЕВА, а не из `/api/session/{id}/diff`.
+        #
+        # Тот эндпоинт в opencode 2.0.22 возвращает `{"data": []}` при
+        # `outcome == "succeeded"` и изменённом на диске файле - измерено на
+        # живом сервере, три прогона, и с поправкой на расположение каталога.
+        # Поэтому источник правды - снимок каталога до и после хода.
+        #
+        # Эндпоинт не выбрасывается: если он когда-нибудь начнёт отвечать, он
+        # авторитетнее (в нём есть переименования), и тогда он выигрывает. Но
+        # пустой ответ эндпоинта - это НЕ «изменений нет», это отсутствие
+        # данных, и подменять им пустой diff нельзя.
+        computed_diff, _after = diff_worktree(task.directory, before)
+        api_diff = []
+        try:
+            api_diff = self.transport.diff(sid) or []
+        except Exception:  # noqa: BLE001
+            api_diff = []
+        diff = api_diff or computed_diff
+        source = "opencode-session-diff" if api_diff else "worktree-snapshot"
+
+        # Пустой diff обязан называть причину. Пустой список без причины
+        # читается как «проверено, изменений нет» - а при живом прогоне это
+        # означало «мы ничего не измерили», и приёмка падала без объяснения.
+        reason = ""
+        if not diff:
+            outcome_word = None
+            try:
+                outcome_word = (self.transport.session(sid) or {}).get("outcome")
+            except Exception:  # noqa: BLE001
+                outcome_word = None
+            reason = describe_empty(task.directory, outcome_word)
+
         cost = 0
         try:
             cost = float((self.transport.session(sid) or {}).get("cost") or 0)
@@ -325,7 +363,8 @@ class QueueRunner:
         job.update({"status": "done", "diff": diff, "cost": cost,
                     "model": task.model, "sessions": [d.get("file")
                                                        for d in diff],
-                    "error": "", "updated": time.time()})
+                    "diff_source": source,
+                    "error": reason, "updated": time.time()})
         self.store.put(digest, job)
 
         # Уборка: сессия opencode не остаётся жить после приёмки.
