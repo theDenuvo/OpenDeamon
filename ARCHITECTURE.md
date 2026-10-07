@@ -36,6 +36,13 @@ binaries A:\hermes\bin + C:\Users\cheli\AppData\Local\hermes\hermes-agent)
   config: A:\OpenDeamon\hermes-home\config.yaml (minimal, 3 blocks)
   state:  A:\OpenDeamon\hermes-home\ (sessions, state.db, skills hub cache,
           models_dev_cache.json, logs — all on A:)
+
+> **Версия на сервере (2026-10-07): `v0.21.5+8306.gfd4dc86` (2026.9.24).**
+> Документ ниже описывает `v0.21.4`, как её ставили на Windows. На сервере стоит
+> `0.21.5` — новее документированной, и это решение владельца: `v0.21.4` на PyPI
+> отсутствует (там `0.19.0`), а ручная сборка из исходников потребовала бы
+> отдельного решения. Проверено: `hermes --version` → `v0.21.5+8306.gfd4dc86`,
+> живой ответ на бесплатной модели даёт. Метод установки — `git`.
  │
  ├── model.provider=openrouter, model=nvidia/nemotron-3-super-120b-a12b:free
  ├── fallback_providers (native, per-turn, config-only):

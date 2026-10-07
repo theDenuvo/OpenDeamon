@@ -7,7 +7,7 @@ No `.git` created. Nothing installed on `C:` (audit in §17).
 
 | Component | Version | Location | Notes |
 |---|---|---|---|
-| Hermes Agent (binaries) | v0.21.4 (2026.9.21, upstream d3b25b52) | `A:\hermes\bin\` + `C:\Users\cheli\AppData\Local\hermes\hermes-agent` | PRE-EXISTING, reused as-is, NOT reinstalled |
+| Hermes Agent (binaries) | v0.21.4 (2026.9.21, upstream d3b25b52); на сервере v0.21.5 | `A:\hermes\bin\` + `C:\Users\cheli\AppData\Local\hermes\hermes-agent` | PRE-EXISTING, reused as-is, NOT reinstalled |
 | Hermes Python | 3.11.16 (own venv) | inside pre-existing install | untouched |
 | Hermes Node.js | bundled | `A:\hermes\node\` | untouched |
 | Hermes uv | bundled | `A:\hermes\bin\uv.exe` | untouched |
@@ -16,6 +16,12 @@ No `.git` created. Nothing installed on `C:` (audit in §17).
 | Node.js (system) | v22.13.0 | `Z:\Node.js\` | reused, untouched |
 | uv (user) | 0.11.21 | `C:\Users\cheli\.local\bin\` | not used by build |
 | Python launcher | 3.14.0 (`py`) | system | used only for one-off setup scripts |
+
+**Версия Hermes на сервере: `v0.21.5+8306.gfd4dc86` (2026.9.24), метод `git`.**
+Таблица выше — постановка на Windows (`v0.21.4`). На сервере версия
+новее: `v0.21.4` на PyPI отсутствует (там `0.19.0`), а сборка из
+исходников была бы отдельным решением владельца. Принято с пометкой:
+разница версий меняет номер сборки, а не архитектуру.
 
 NEW files created by this deployment (all on `A:`): `bootstrap.ps1`,
 `hermes-home\config.yaml`, `hermes-home\*` (state/sessions/skills hub),
