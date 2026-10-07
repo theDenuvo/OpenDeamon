@@ -685,7 +685,8 @@ def test_the_installer_is_reproducible_and_pinned():
         got = sp.run(["bash", str(script)], capture_output=True, text=True,
                      timeout=180,
                      env=dict(os.environ,
-                              HERMES_SEARXNG_PREFIX=os.path.join(tmp, "p")))
+                              HERMES_SEARXNG_PREFIX=os.path.join(tmp, "p"),
+                              HERMES_PYTHON_BASE=sys.executable))
         if got.returncode == 0:
             fails.append("install_searxng.sh accepted a prefix under %s; the "
                          "first install went to a tmpfs and vanished on reboot"
@@ -711,6 +712,7 @@ def test_the_installer_is_reproducible_and_pinned():
                      timeout=180,
                      env=dict(os.environ,
                               HERMES_SEARXNG_PREFIX=prefix,
+                              HERMES_PYTHON_BASE=sys.executable,
                               HERMES_SEARXNG_SECRET_ENV=os.path.join(
                                   scratch, "absent.env")))
         if got.returncode == 0:
