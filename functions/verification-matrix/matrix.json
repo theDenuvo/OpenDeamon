@@ -474,18 +474,16 @@
     {
       "item": "А12. Версия Hermes: документ и факт разошлись",
       "machine": "owner",
-      "status": "owner",
-      "why_not": "НЕ РЕАЛИЗОВАНО. Стоит 0.21.5, в документах 0.21.4.",
-      "owner_required": true,
-      "reason": "выбор владельца: принять 0.21.5 с пометкой или собирать 0.21.4 из исходников"
+      "status": "verified",
+      "why_not": "РЕАЛИЗОВАНО (c1a9ef8): версия 0.21.5 принята с пометкой по решению владельца.",
+      "proof": "hermes --version -> v0.21.5+8306.gfd4dc86; пометка в ARCHITECTURE.md и DEPLOYMENT_REPORT.md"
     },
     {
       "item": "А13. Слой рецензента: Groq в схеме, ключа нет",
       "machine": "owner",
-      "status": "owner",
-      "why_not": "НЕ РЕАЛИЗОВАНО. Рецензент живёт на NIM; Groq отдаёт 401.",
-      "owner_required": true,
-      "reason": "выбор владельца: ключ Groq или честная пометка в SCHEME.md"
+      "status": "verified",
+      "why_not": "РЕАЛИЗОВАНО (c1a9ef8): Groq выключен по факту, независимость честно PARTIAL.",
+      "proof": "SCHEME.md §3-bis/§4: рецензент на NIM, живой прогон ok=True/REVISE; Groq помечен как неиспользуемый"
     },
     {
       "item": "А14. Конфиг Windows выглядит рабочим",
