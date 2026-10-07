@@ -475,15 +475,15 @@
       "item": "А12. Версия Hermes: документ и факт разошлись",
       "machine": "owner",
       "status": "verified",
-      "why_not": "РЕАЛИЗОВАНО (c1a9ef8): версия 0.21.5 принята с пометкой по решению владельца.",
-      "proof": "hermes --version -> v0.21.5+8306.gfd4dc86; пометка в ARCHITECTURE.md и DEPLOYMENT_REPORT.md"
+      "why_not": "РЕАЛИЗОВАНО по решению владельца (принять 0.21.5 с пометкой). Версия в документах сверена с живой: hermes --version.",
+      "proof": "hermes --version -> Hermes Agent v0.21.5+8306.gfd4dc86; пометка о более новой версии в ARCHITECTURE.md и DEPLOYMENT_REPORT.md"
     },
     {
       "item": "А13. Слой рецензента: Groq в схеме, ключа нет",
       "machine": "owner",
       "status": "verified",
-      "why_not": "РЕАЛИЗОВАНО (c1a9ef8): Groq выключен по факту, независимость честно PARTIAL.",
-      "proof": "SCHEME.md §3-bis/§4: рецензент на NIM, живой прогон ok=True/REVISE; Groq помечен как неиспользуемый"
+      "why_not": "РЕАЛИЗОВАНО: Groq выключен по факту (401 без ключа), рецензент живёт на NIM, и схема больше не обещает Groq рельсом. Независимость не заявлена, а вычисляется.",
+      "proof": "functions/verdict/test_verdict.py::fallback chain landing on the core provider is flagged"
     },
     {
       "item": "А14. Конфиг Windows выглядит рабочим",
