@@ -55,7 +55,7 @@ FOLLOWUP_RE = re.compile(
 
 def log(msg):
     line = "%s %s\n" % (time.strftime("%H:%M:%S"), msg)
-    with open(LOG, "a", encoding="utf-8") as f:
+    with open(LOG, "a", encoding="utf-8-sig") as f:
         f.write(line)
 
 
@@ -74,7 +74,7 @@ def build_env():
     env["PYTHONIOENCODING"] = "utf-8"
     if r"A:\hermes\bin" not in env.get("PATH", ""):
         env["PATH"] = r"A:\hermes\bin;" + env.get("PATH", "")
-    text = open(SECRETS, encoding="utf-8").read()
+    text = open(SECRETS, encoding="utf-8-sig").read()
     m = re.search(r"api_key\s*=\s*[\"']([^\"']+)", text)
     if m:
         env["OPENROUTER_API_KEY"] = m.group(1)
