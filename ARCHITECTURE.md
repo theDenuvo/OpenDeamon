@@ -31,18 +31,16 @@ A:\OpenDeamon\bootstrap.ps1          process-scoped env (no system changes):
   - PATH += A:\hermes\bin  (reuse of pre-existing Hermes install)
  │
  ▼
-Hermes Agent v0.21.4 (NousResearch/hermes-agent, pre-existing install:
+Hermes Agent v0.21.5 (NousResearch/hermes-agent, pre-existing install:
 binaries A:\hermes\bin + C:\Users\cheli\AppData\Local\hermes\hermes-agent)
   config: A:\OpenDeamon\hermes-home\config.yaml (minimal, 3 blocks)
+  > **Версия на сервере: `v0.21.5+8306.gfd4dc86` (2026.9.24, git).**
+  > Документ ниже описывает `v0.21.4`, как её ставили на Windows.
+  > На сервере стоит `v0.21.5` — новее документированной, `v0.21.4` на PyPI
+  > отсутствует (там `0.19.0`), ручная сборка потребовала бы решения.
+  > Проверено: `hermes --version` → `v0.21.5+8306.gfd4dc86`.
   state:  A:\OpenDeamon\hermes-home\ (sessions, state.db, skills hub cache,
           models_dev_cache.json, logs — all on A:)
-
-> **Версия на сервере (2026-10-07): `v0.21.5+8306.gfd4dc86` (2026.9.24).**
-> Документ ниже описывает `v0.21.4`, как её ставили на Windows. На сервере стоит
-> `0.21.5` — новее документированной, и это решение владельца: `v0.21.4` на PyPI
-> отсутствует (там `0.19.0`), а ручная сборка из исходников потребовала бы
-> отдельного решения. Проверено: `hermes --version` → `v0.21.5+8306.gfd4dc86`,
-> живой ответ на бесплатной модели даёт. Метод установки — `git`.
  │
  ├── model.provider=openrouter, model=nvidia/nemotron-3-super-120b-a12b:free
  ├── fallback_providers (native, per-turn, config-only):
